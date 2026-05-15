@@ -1,9 +1,9 @@
 name: Refresh dashboard
 
 on:
-  schedule:
-    - cron: "*/15 * * * *"   # a cada 15 minutos
-  workflow_dispatch:          # botão "Run workflow" no GitHub UI
+  # CRON desabilitado — atualização será feita via Apps Script no Sheets.
+  # Mantemos workflow_dispatch para refresh manual via GitHub UI.
+  workflow_dispatch:
 
 # Evita que duas execuções concorrentes pisem o repo
 concurrency:
