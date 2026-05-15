@@ -1,0 +1,56 @@
+name: Refresh dashboard
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # a cada 15 minutos
+  workflow_dispatch:          # botão "Run workflow" no GitHub UI
+
+# Evita que duas execuções concorrentes pisem o repo
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # pra dar push de volta no main
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download spreadsheet
+        env:
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+        run: python3 download.py
+
+      - name: Parse XLSX → data.json
+        run: python3 parse.py
+
+      - name: Build encrypted index.html
+        env:
+          DASH_PASSWORD: ${{ secrets.DASH_PASSWORD }}
+        run: python3 build.py --password "$DASH_PASSWORD"
+
+      - name: Commit if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- index.html; then
+            echo "No changes to index.html — skipping commit."
+          else
+            git add index.html
+            git commit -m "Auto-refresh: $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+          fi

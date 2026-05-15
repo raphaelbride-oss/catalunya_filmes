@@ -1,9 +1,12 @@
-# Source / data — NUNCA versionar no repo público
+# Dados sensíveis — NUNCA versionar
 data.json
-template.html
-parse.py
-build.py
-/tmp/
+service-account.json
+*.xlsx
+
+# Cache / build
 __pycache__/
 *.pyc
 .DS_Store
+
+# Skill local (Claude Code) — não compartilhar
+.claude/

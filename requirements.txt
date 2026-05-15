@@ -1,0 +1,4 @@
+openpyxl>=3.1.5
+cryptography>=43.0
+google-api-python-client>=2.140
+google-auth>=2.34
