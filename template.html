@@ -7,17 +7,18 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <style>
 :root {
-  --bg: #0d1117;
-  --surface: #161b22;
-  --surface-2: #1c2230;
-  --border: #30363d;
-  --text: #e6edf3;
-  --muted: #8b949e;
-  --accent: #58a6ff;
-  --green: #3fb950;
-  --red: #f85149;
-  --amber: #d29922;
-  --purple: #bc8cff;
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --border: #e4e4e7;
+  --text: #18181b;
+  --muted: #71717a;
+  --accent: #2563eb;
+  --green: #16a34a;
+  --red: #dc2626;
+  --amber: #d97706;
+  --purple: #7c3aed;
+  --grid-line: #f4f4f5;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
@@ -34,7 +35,7 @@ main { padding: 24px 32px 64px; max-width: 1600px; margin: 0 auto; }
 .filter-bar .presets button:hover { border-color: var(--accent); }
 .filter-bar .presets button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 .filter-bar .range { display: flex; gap: 8px; align-items: center; }
-.filter-bar input[type="date"] { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 6px 10px; border-radius: 6px; font-size: 13px; color-scheme: dark; }
+.filter-bar input[type="date"] { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 6px 10px; border-radius: 6px; font-size: 13px; color-scheme: light; }
 .filter-bar input[type="date"]:focus { outline: none; border-color: var(--accent); }
 .filter-bar .summary-pill { font-size: 12px; color: var(--muted); margin-left: auto; }
 .filter-bar .summary-pill b { color: var(--text); }
@@ -71,12 +72,12 @@ main { padding: 24px 32px 64px; max-width: 1600px; margin: 0 auto; }
 .list td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .list tr:last-child td { border-bottom: none; }
 .list .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
-.tag.atrasado { background: rgba(248,81,73,0.15); color: var(--red); }
-.tag.pendente  { background: rgba(210,153,34,0.15); color: var(--amber); }
-.tag.pago      { background: rgba(63,185,80,0.15); color: var(--green); }
-.tag.recebido  { background: rgba(63,185,80,0.15); color: var(--green); }
-.tag.in       { background: rgba(63,185,80,0.15); color: var(--green); }
-.tag.out      { background: rgba(248,81,73,0.15); color: var(--red); }
+.tag.atrasado { background: #fef2f2; color: var(--red); border: 1px solid #fecaca; }
+.tag.pendente  { background: #fffbeb; color: var(--amber); border: 1px solid #fde68a; }
+.tag.pago      { background: #f0fdf4; color: var(--green); border: 1px solid #bbf7d0; }
+.tag.recebido  { background: #f0fdf4; color: var(--green); border: 1px solid #bbf7d0; }
+.tag.in       { background: #f0fdf4; color: var(--green); border: 1px solid #bbf7d0; }
+.tag.out      { background: #fef2f2; color: var(--red); border: 1px solid #fecaca; }
 .empty { padding: 40px; text-align: center; color: var(--muted); font-size: 13px; }
 
 .toggle { display: flex; gap: 4px; margin-bottom: 12px; }
@@ -88,9 +89,9 @@ main { padding: 24px 32px 64px; max-width: 1600px; margin: 0 auto; }
 .legend-inline .dot { width: 10px; height: 10px; border-radius: 50%; }
 
 /* Drill-down drawer */
-.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 100; }
+.overlay { position: fixed; inset: 0; background: rgba(24,24,27,0.35); opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 100; }
 .overlay.open { opacity: 1; pointer-events: auto; }
-.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(900px, 100vw); background: var(--surface); border-left: 1px solid var(--border); transform: translateX(100%); transition: transform 0.25s ease; z-index: 101; display: flex; flex-direction: column; box-shadow: -10px 0 30px rgba(0,0,0,0.3); }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(900px, 100vw); background: var(--surface); border-left: 1px solid var(--border); transform: translateX(100%); transition: transform 0.25s ease; z-index: 101; display: flex; flex-direction: column; box-shadow: -10px 0 30px rgba(24,24,27,0.10); }
 .drawer.open { transform: translateX(0); }
 .drawer header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .drawer header h2 { margin: 0; font-size: 17px; font-weight: 600; color: var(--text); }
@@ -112,11 +113,11 @@ main { padding: 24px 32px 64px; max-width: 1600px; margin: 0 auto; }
 .drawer th.sorted.asc::after { content: " ▴"; }
 .drawer td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .drawer td.muted { color: var(--muted); }
-.drawer tr:hover td { background: rgba(88,166,255,0.05); }
+.drawer tr:hover td { background: rgba(37,99,235,0.04); }
 
 /* Lock screen */
 .lock { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 200; }
-.lock .card-login { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 36px 40px; width: min(380px, 92vw); box-shadow: 0 20px 60px rgba(0,0,0,0.4); }
+.lock .card-login { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 36px 40px; width: min(380px, 92vw); box-shadow: 0 10px 40px rgba(24,24,27,0.12); }
 .lock h1 { margin: 0 0 8px; font-size: 18px; font-weight: 600; }
 .lock p { margin: 0 0 20px; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .lock form { display: flex; flex-direction: column; gap: 12px; }
@@ -171,12 +172,12 @@ main { padding: 24px 32px 64px; max-width: 1600px; margin: 0 auto; }
   <section class="card wide">
     <h2>Entradas vs Saídas por mês</h2>
     <div class="desc">
-      <span class="legend-inline"><span class="dot" style="background: #2da44e"></span>Entradas — Realizado</span>
-      <span class="legend-inline"><span class="dot" style="background: #3fb950; opacity: 0.5"></span>Entradas — A realizar</span>
-      <span class="legend-inline"><span class="dot" style="background: #cf222e"></span>Saídas — Realizado</span>
-      <span class="legend-inline"><span class="dot" style="background: #f85149; opacity: 0.5"></span>Saídas — A realizar</span>
-      <span class="legend-inline"><span class="dot" style="background: #d29922"></span>Atrasado</span>
-      <span class="legend-inline"><span class="dot" style="background: #58a6ff"></span>Saldo do mês</span>
+      <span class="legend-inline"><span class="dot" style="background: #16a34a"></span>Entradas — Realizado</span>
+      <span class="legend-inline"><span class="dot" style="background: #22c55e; opacity: 0.5"></span>Entradas — A realizar</span>
+      <span class="legend-inline"><span class="dot" style="background: #dc2626"></span>Saídas — Realizado</span>
+      <span class="legend-inline"><span class="dot" style="background: #ef4444; opacity: 0.5"></span>Saídas — A realizar</span>
+      <span class="legend-inline"><span class="dot" style="background: #d97706"></span>Atrasado</span>
+      <span class="legend-inline"><span class="dot" style="background: #2563eb"></span>Saldo do mês</span>
     </div>
     <div class="chart-wrap" style="height: 380px;"><canvas id="chart-fluxo"></canvas></div>
   </section>
@@ -566,7 +567,7 @@ function renderSaldo() {
       const { ctx, chartArea } = chart;
       const x = active[0].element.x;
       ctx.save();
-      ctx.strokeStyle = "rgba(88,166,255,0.4)";
+      ctx.strokeStyle = "rgba(37,99,235,0.4)";
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
@@ -583,8 +584,8 @@ function renderSaldo() {
     data: {
       labels,
       datasets: [
-        { label: "Realizado", data: pastData, borderColor: "#8b949e", backgroundColor: "rgba(139,148,158,0.12)", fill: true, pointRadius: 0, pointHoverRadius: 6, pointHoverBackgroundColor: "#8b949e", pointHoverBorderColor: "#fff", pointHoverBorderWidth: 2, borderWidth: 2, tension: 0.1 },
-        { label: "Projetado", data: futData,  borderColor: "#58a6ff", backgroundColor: "rgba(88,166,255,0.18)", fill: true, pointRadius: 0, pointHoverRadius: 6, pointHoverBackgroundColor: "#58a6ff", pointHoverBorderColor: "#fff", pointHoverBorderWidth: 2, borderWidth: 2, tension: 0.1 },
+        { label: "Realizado", data: pastData, borderColor: "#52525b", backgroundColor: "rgba(82,82,91,0.10)", fill: true, pointRadius: 0, pointHoverRadius: 6, pointHoverBackgroundColor: "#52525b", pointHoverBorderColor: "#fff", pointHoverBorderWidth: 2, borderWidth: 2, tension: 0.1 },
+        { label: "Projetado", data: futData,  borderColor: "#2563eb", backgroundColor: "rgba(37,99,235,0.10)", fill: true, pointRadius: 0, pointHoverRadius: 6, pointHoverBackgroundColor: "#2563eb", pointHoverBorderColor: "#fff", pointHoverBorderWidth: 2, borderWidth: 2, tension: 0.1 },
       ],
     },
     options: {
@@ -593,13 +594,13 @@ function renderSaldo() {
       plugins: {
         legend: { labels: { color: "#e6edf3" } },
         tooltip: {
-          backgroundColor: "rgba(22,27,34,0.95)",
-          borderColor: "#30363d",
+          backgroundColor: "rgba(255,255,255,0.98)",
+          borderColor: "#e4e4e7",
           borderWidth: 1,
           padding: 12,
-          titleColor: "#e6edf3",
+          titleColor: "#18181b",
           titleFont: { weight: "600", size: 13 },
-          bodyColor: "#e6edf3",
+          bodyColor: "#18181b",
           bodyFont: { size: 13 },
           displayColors: true,
           boxPadding: 6,
@@ -618,8 +619,8 @@ function renderSaldo() {
         },
       },
       scales: {
-        x: { type: "time", time: { unit: series.length > 90 ? "month" : "week", displayFormats: { month: "MMM/yy", week: "dd/MM" } }, ticks: { color: "#8b949e" }, grid: { color: "#21262d" } },
-        y: { ticks: { color: "#8b949e", callback: v => BRL(v) }, grid: { color: "#21262d" } },
+        x: { type: "time", time: { unit: series.length > 90 ? "month" : "week", displayFormats: { month: "MMM/yy", week: "dd/MM" } }, ticks: { color: "#71717a" }, grid: { color: "#e4e4e7" } },
+        y: { ticks: { color: "#71717a", callback: v => BRL(v) }, grid: { color: "#e4e4e7" } },
       },
       onClick: (evt, elems) => {
         if (!elems.length) return;
@@ -694,13 +695,13 @@ function renderFluxo() {
     data: {
       labels: months.map(fmtMonth),
       datasets: [
-        { label: "Entradas — Realizado",   data: arAct,  backgroundColor: "#2da44e", stack: "ar", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
-        { label: "Entradas — Atrasado",    data: arLate, backgroundColor: "#d29922", stack: "ar", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
-        { label: "Entradas — A realizar",  data: arFcst, backgroundColor: "rgba(63,185,80,0.55)", borderColor: "#3fb950", borderWidth: { top: 1, left: 1, right: 1, bottom: 0 }, stack: "ar", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
-        { label: "Saídas — Realizado",    data: apAct,  backgroundColor: "#cf222e", stack: "ap", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
-        { label: "Saídas — Atrasado",     data: apLate, backgroundColor: "#d29922", stack: "ap", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
-        { label: "Saídas — A realizar",   data: apFcst, backgroundColor: "rgba(248,81,73,0.55)", borderColor: "#f85149", borderWidth: { top: 1, left: 1, right: 1, bottom: 0 }, stack: "ap", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
-        { label: "Saldo do mês", data: net, type: "line", borderColor: "#58a6ff", backgroundColor: "#58a6ff", pointRadius: 3, borderWidth: 2, tension: 0.2, order: 1, yAxisID: "y" },
+        { label: "Entradas — Realizado",   data: arAct,  backgroundColor: "#16a34a", stack: "ar", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
+        { label: "Entradas — Atrasado",    data: arLate, backgroundColor: "#d97706", stack: "ar", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
+        { label: "Entradas — A realizar",  data: arFcst, backgroundColor: "rgba(34,197,94,0.50)", borderColor: "#22c55e", borderWidth: { top: 1, left: 1, right: 1, bottom: 0 }, stack: "ar", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
+        { label: "Saídas — Realizado",    data: apAct,  backgroundColor: "#dc2626", stack: "ap", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
+        { label: "Saídas — Atrasado",     data: apLate, backgroundColor: "#d97706", stack: "ap", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
+        { label: "Saídas — A realizar",   data: apFcst, backgroundColor: "rgba(239,68,68,0.50)", borderColor: "#ef4444", borderWidth: { top: 1, left: 1, right: 1, bottom: 0 }, stack: "ap", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
+        { label: "Saldo do mês", data: net, type: "line", borderColor: "#2563eb", backgroundColor: "#2563eb", pointRadius: 3, borderWidth: 2, tension: 0.2, order: 1, yAxisID: "y" },
       ],
     },
     options: {
@@ -725,8 +726,8 @@ function renderFluxo() {
         },
       },
       scales: {
-        x: { stacked: true, ticks: { color: "#8b949e" }, grid: { display: false } },
-        y: { stacked: true, ticks: { color: "#8b949e", callback: v => BRL(v) }, grid: { color: "#21262d" } },
+        x: { stacked: true, ticks: { color: "#71717a" }, grid: { display: false } },
+        y: { stacked: true, ticks: { color: "#71717a", callback: v => BRL(v) }, grid: { color: "#e4e4e7" } },
       },
       onClick: (evt, elems) => {
         if (!elems.length) return;
@@ -776,7 +777,7 @@ function renderCat() {
   const pendAR = getFilteredAR();
   let groups = {};
   let title = "";
-  const palette = ["#58a6ff","#3fb950","#bc8cff","#f85149","#d29922","#79c0ff","#56d364","#ff7b72","#ffa657","#a371f7","#7ee787","#f0883e","#388bfd","#db61a2","#39c5cf"];
+  const palette = ["#2563eb","#22c55e","#bc8cff","#ef4444","#d97706","#79c0ff","#56d364","#ff7b72","#ffa657","#a371f7","#7ee787","#f0883e","#388bfd","#db61a2","#39c5cf"];
 
   if (activeCatMode === "ap-cat") {
     pendAP.forEach(r => { const k = r.item_cash || "(sem categoria)"; groups[k] = (groups[k] || 0) + r.valor; });
@@ -808,13 +809,13 @@ function renderCat() {
   }
   chartCat = new Chart(document.getElementById("chart-cat"), {
     type: "doughnut",
-    data: { labels, datasets: [{ data, backgroundColor: palette, borderColor: "#161b22", borderWidth: 2 }] },
+    data: { labels, datasets: [{ data, backgroundColor: palette, borderColor: "#ffffff", borderWidth: 2 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { position: "right", labels: { color: "#e6edf3", font: { size: 11 }, boxWidth: 12 } },
         tooltip: { callbacks: { title: () => "", label: c => `${fullLabels[c.dataIndex]}: ${BRLfull(c.parsed)}` } },
-        title: { display: true, text: title, color: "#8b949e", font: { weight: "normal", size: 12 } },
+        title: { display: true, text: title, color: "#71717a", font: { weight: "normal", size: 12 } },
       },
       cutout: "55%",
       onClick: (evt, elems) => {
