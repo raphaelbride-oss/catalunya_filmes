@@ -990,14 +990,8 @@ function renderTreeTable({ tree, columns, container, expanded, onRowClick, title
   const allParentIds = (arr) => arr.flatMap(n => n.children ? [n.id, ...allParentIds(n.children)] : []);
 
   let html = "";
-  if (title || true) {
-    html += `<div class="tree-table-toolbar">
-      <div class="title-block">${title || ""}</div>
-      <div class="actions">
-        <button data-act="expand">Expandir tudo</button>
-        <button data-act="collapse">Recolher tudo</button>
-      </div>
-    </div>`;
+  if (title) {
+    html += `<div class="tree-table-toolbar"><div class="title-block">${title}</div></div>`;
   }
 
   // Tabela
@@ -1040,17 +1034,6 @@ function renderTreeTable({ tree, columns, container, expanded, onRowClick, title
 
   html += `<table class="dre-table tree-table">${thead}${tbody}</table>`;
   container.innerHTML = html;
-
-  // Toolbar handlers
-  const parentIds = allParentIds(tree);
-  container.querySelector('[data-act="expand"]').addEventListener("click", () => {
-    parentIds.forEach(id => expanded.add(id));
-    renderTreeTable({ tree, columns, container, expanded, onRowClick, title });
-  });
-  container.querySelector('[data-act="collapse"]').addEventListener("click", () => {
-    parentIds.forEach(id => expanded.delete(id));
-    renderTreeTable({ tree, columns, container, expanded, onRowClick, title });
-  });
 
   // Row handlers
   container.querySelectorAll(".tree-row").forEach(tr => {
