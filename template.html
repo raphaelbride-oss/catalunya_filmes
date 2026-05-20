@@ -75,6 +75,21 @@ main { padding: 24px 32px 64px; max-width: 1600px; margin: 0 auto; }
 .dre-pos { color: var(--green); }
 .dre-neg { color: var(--red); }
 
+/* Tree table — colapsável hierárquica */
+.tree-table-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 12px; }
+.tree-table-toolbar .title-block { color: var(--muted); font-size: 12px; }
+.tree-table-toolbar .actions { display: flex; gap: 6px; }
+.tree-table-toolbar .actions button { background: var(--surface); border: 1px solid var(--border); color: var(--text); font-size: 12px; padding: 5px 10px; border-radius: 6px; cursor: pointer; }
+.tree-table-toolbar .actions button:hover { border-color: var(--accent); color: var(--accent); }
+.chev { display: inline-block; width: 14px; color: var(--muted); transition: transform 0.15s; user-select: none; font-size: 10px; }
+.chev.open { transform: rotate(0deg); }
+.tree-row[data-has-children="true"] { cursor: pointer; }
+.tree-row[data-has-children="true"]:hover td { background: rgba(37,99,235,0.04); }
+.tree-row.hidden { display: none; }
+.tree-table .indent-0 td:first-child { padding-left: 12px; }
+.tree-table .indent-1 td:first-child { padding-left: 36px; color: var(--muted); font-weight: 400; }
+.tree-table .indent-2 td:first-child { padding-left: 60px; color: var(--muted); font-weight: 400; font-size: 12px; }
+
 /* Projects table */
 .proj-table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .proj-table th, .proj-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
@@ -943,6 +958,116 @@ document.querySelectorAll(".toggle button").forEach(b => {
 });
 
 // ============================================================
+// TREE TABLE HELPER — renderiza tabela hierárquica colapsável
+// ============================================================
+//
+// tree: [{ id, label, level, cells: [{html, num, color}], children?: [...], type? }]
+//   type pode ser "section" | "subitem" | "total" — afeta classes css
+//
+// state: { expanded: Set<id> } — controla quais nós estão abertos (mutado externamente)
+//
+// columns: [{ label, num, header? }] — colunas de dados (1ª coluna é o label da árvore)
+//
+// container: elemento DOM onde renderizar
+//
+// onRowClick: optional, recebe o id do nó clicado quando NÃO há children
+// ============================================================
+function renderTreeTable({ tree, columns, container, expanded, onRowClick, title }) {
+  const nodes = [];
+  // Atribui id se não tiver, ordena
+  let counter = 0;
+  const assignIds = (arr, prefix = "") => {
+    for (const n of arr) {
+      if (!n.id) n.id = `${prefix}n${counter++}`;
+      if (n.children) assignIds(n.children, n.id + "-");
+    }
+  };
+  assignIds(tree);
+
+  // Toolbar com título + Expandir / Recolher
+  const collectIds = (arr) => arr.flatMap(n => [n.id, ...(n.children ? collectIds(n.children) : [])]);
+  const allParentIds = (arr) => arr.flatMap(n => n.children ? [n.id, ...allParentIds(n.children)] : []);
+
+  let html = "";
+  if (title || true) {
+    html += `<div class="tree-table-toolbar">
+      <div class="title-block">${title || ""}</div>
+      <div class="actions">
+        <button data-act="expand">Expandir tudo</button>
+        <button data-act="collapse">Recolher tudo</button>
+      </div>
+    </div>`;
+  }
+
+  // Tabela
+  const thead = `<thead><tr>` +
+    columns.map((c, i) => `<th${i === 0 ? "" : ` class="num"`} style="${c.num && i > 0 ? "text-align:right" : ""}">${c.label}</th>`).join("") +
+    `</tr></thead>`;
+
+  function renderRow(node, level, parentVisible) {
+    const hasChildren = !!(node.children && node.children.length);
+    const open = expanded.has(node.id);
+    const visible = parentVisible;
+    const classes = ["tree-row", `indent-${level}`];
+    if (node.type === "section") classes.push("section");
+    if (node.type === "total") classes.push("total");
+    if (!visible) classes.push("hidden");
+    let row = `<tr class="${classes.join(" ")}" data-id="${node.id}" data-has-children="${hasChildren}">`;
+    // Coluna 0 (label)
+    const chev = hasChildren ? `<span class="chev ${open ? "open" : ""}">${open ? "▾" : "▸"}</span> ` : `<span class="chev">  </span> `;
+    row += `<td>${chev}${node.label.replace(/</g, "&lt;")}</td>`;
+    // Demais colunas
+    for (let i = 1; i < columns.length; i++) {
+      const cell = node.cells[i - 1] || { html: "—" };
+      const cls = columns[i].num ? " class=\"num\"" : "";
+      const style = cell.color ? ` style="color:${cell.color};${cell.bold ? "font-weight:600" : ""}"` : (cell.bold ? ` style="font-weight:600"` : "");
+      row += `<td${cls}${style}>${cell.html}</td>`;
+    }
+    row += `</tr>`;
+    let out = row;
+    if (hasChildren) {
+      for (const c of node.children) {
+        out += renderRow(c, level + 1, visible && open);
+      }
+    }
+    return out;
+  }
+
+  let tbody = "<tbody>";
+  for (const n of tree) tbody += renderRow(n, 0, true);
+  tbody += "</tbody>";
+
+  html += `<table class="dre-table tree-table">${thead}${tbody}</table>`;
+  container.innerHTML = html;
+
+  // Toolbar handlers
+  const parentIds = allParentIds(tree);
+  container.querySelector('[data-act="expand"]').addEventListener("click", () => {
+    parentIds.forEach(id => expanded.add(id));
+    renderTreeTable({ tree, columns, container, expanded, onRowClick, title });
+  });
+  container.querySelector('[data-act="collapse"]').addEventListener("click", () => {
+    parentIds.forEach(id => expanded.delete(id));
+    renderTreeTable({ tree, columns, container, expanded, onRowClick, title });
+  });
+
+  // Row handlers
+  container.querySelectorAll(".tree-row").forEach(tr => {
+    const id = tr.dataset.id;
+    const hasChildren = tr.dataset.hasChildren === "true";
+    tr.addEventListener("click", () => {
+      if (hasChildren) {
+        if (expanded.has(id)) expanded.delete(id);
+        else expanded.add(id);
+        renderTreeTable({ tree, columns, container, expanded, onRowClick, title });
+      } else if (onRowClick) {
+        onRowClick(id);
+      }
+    });
+  });
+}
+
+// ============================================================
 // PRINCIPAIS DEVEDORES — AR pendente por cliente (não filtra por período;
 // mostra todos os créditos em aberto, ordenados por valor)
 // ============================================================
@@ -1186,71 +1311,99 @@ function renderVenc() {
 }
 
 // Pivot por Item Cash: linhas = categoria, colunas = Entradas / Saídas / Saldo
+const vencPivotExpanded = new Set();
+
 function renderVencPivot(items) {
   const wrap = document.getElementById("venc-pivot");
   if (!items || !items.length) { wrap.innerHTML = ""; return; }
 
-  // Agregar
-  const byCat = {}; // { item_cash: { ar: 0, ap: 0 } }
+  // 2 níveis: cat (item_cash) → fornecedor (AP) ou cliente (AR)
+  const byCat = {};
   for (const it of items) {
     const cat = (it.item || "(sem categoria)").trim() || "(sem categoria)";
-    if (!byCat[cat]) byCat[cat] = { ar: 0, ap: 0 };
-    if (it.tipo === "AR") byCat[cat].ar += (it.valor || 0);
-    else byCat[cat].ap += (it.valor || 0);
+    const parte = (it.parte || "(sem)").trim() || "(sem)";
+    if (!byCat[cat]) byCat[cat] = { ar: 0, ap: 0, count: 0, byParte: {} };
+    byCat[cat][it.tipo === "AR" ? "ar" : "ap"] += (it.valor || 0);
+    byCat[cat].count += 1;
+    if (!byCat[cat].byParte[parte]) byCat[cat].byParte[parte] = { ar: 0, ap: 0, count: 0 };
+    byCat[cat].byParte[parte][it.tipo === "AR" ? "ar" : "ap"] += (it.valor || 0);
+    byCat[cat].byParte[parte].count += 1;
   }
-  // Ordenar por valor absoluto total
-  const rows = Object.entries(byCat)
-    .map(([cat, v]) => ({ cat, ar: v.ar, ap: v.ap, saldo: v.ar - v.ap }))
-    .sort((a, b) => Math.abs(b.ap + b.ar) - Math.abs(a.ap + a.ar));
 
-  const totalAR = rows.reduce((s, r) => s + r.ar, 0);
-  const totalAP = rows.reduce((s, r) => s + r.ap, 0);
-  const totalSaldo = totalAR - totalAP;
+  // Construir árvore
+  const totalAR = Object.values(byCat).reduce((s, v) => s + v.ar, 0);
+  const totalAP = Object.values(byCat).reduce((s, v) => s + v.ap, 0);
 
-  let html = `<table class="dre-table">
-    <thead><tr>
-      <th>Item Cash (categoria)</th>
-      <th class="num">Entradas</th>
-      <th class="num">Saídas</th>
-      <th class="num">Saldo</th>
-      <th class="num">Lançamentos</th>
-    </tr></thead><tbody>`;
-  for (const r of rows) {
-    const saldoColor = r.saldo >= 0 ? "dre-pos" : "dre-neg";
-    const count = items.filter(it => (it.item || "(sem categoria)").trim() === r.cat).length;
-    html += `<tr class="clickable" data-cat="${r.cat.replace(/"/g, "&quot;")}">
-      <td>${r.cat.replace(/</g, "&lt;")}</td>
-      <td class="num" style="color: ${r.ar > 0 ? 'var(--green)' : 'var(--muted)'}">${r.ar > 0 ? BRL(r.ar) : "—"}</td>
-      <td class="num" style="color: ${r.ap > 0 ? 'var(--red)' : 'var(--muted)'}">${r.ap > 0 ? BRL(r.ap) : "—"}</td>
-      <td class="num ${saldoColor}" style="font-weight: 600">${BRL(r.saldo)}</td>
-      <td class="num" style="color: var(--muted)">${count}</td>
-    </tr>`;
-  }
-  html += `</tbody><tfoot>
-    <tr class="total">
-      <td>TOTAL</td>
-      <td class="num" style="color: var(--green)">${BRL(totalAR)}</td>
-      <td class="num" style="color: var(--red)">${BRL(totalAP)}</td>
-      <td class="num ${totalSaldo >= 0 ? 'dre-pos' : 'dre-neg'}">${BRL(totalSaldo)}</td>
-      <td class="num" style="color: var(--muted)">${items.length}</td>
-    </tr>
-  </tfoot></table>`;
+  const tree = Object.entries(byCat)
+    .map(([cat, v]) => {
+      const children = Object.entries(v.byParte)
+        .map(([parte, pv]) => ({
+          id: `vp:${cat}:${parte}`,
+          label: parte,
+          cells: [
+            { html: pv.ar > 0 ? BRL(pv.ar) : "—", color: pv.ar > 0 ? "var(--green)" : "var(--muted)" },
+            { html: pv.ap > 0 ? BRL(pv.ap) : "—", color: pv.ap > 0 ? "var(--red)" : "var(--muted)" },
+            { html: BRL(pv.ar - pv.ap), color: (pv.ar - pv.ap) >= 0 ? "var(--green)" : "var(--red)", bold: true },
+            { html: String(pv.count), color: "var(--muted)" },
+          ],
+        }))
+        .sort((a, b) => Math.abs(parseFloat((b.cells[2].html || "0").replace(/[^\d,-]/g, "").replace(",", "."))) - Math.abs(parseFloat((a.cells[2].html || "0").replace(/[^\d,-]/g, "").replace(",", "."))));
 
-  wrap.innerHTML = html;
+      return {
+        id: `vc:${cat}`,
+        label: cat,
+        cells: [
+          { html: v.ar > 0 ? BRL(v.ar) : "—", color: v.ar > 0 ? "var(--green)" : "var(--muted)", bold: true },
+          { html: v.ap > 0 ? BRL(v.ap) : "—", color: v.ap > 0 ? "var(--red)" : "var(--muted)", bold: true },
+          { html: BRL(v.ar - v.ap), color: (v.ar - v.ap) >= 0 ? "var(--green)" : "var(--red)", bold: true },
+          { html: String(v.count), color: "var(--muted)" },
+        ],
+        children,
+      };
+    })
+    .sort((a, b) => Math.abs(byCat[b.label].ar + byCat[b.label].ap) - Math.abs(byCat[a.label].ar + byCat[a.label].ap));
 
-  // Click: drawer com lançamentos daquela categoria
-  wrap.querySelectorAll("tr.clickable").forEach(tr => {
-    tr.addEventListener("click", () => {
-      const cat = tr.dataset.cat;
-      const matching = items.filter(it => (it.item || "(sem categoria)").trim() === cat);
-      const total = matching.reduce((s, it) => s + (it.valor || 0) * (it.tipo === "AP" ? -1 : 1), 0);
-      openDrawer({
-        title: `Vencimentos — ${cat}`,
-        sub: `${matching.length} lançamentos · saldo líquido ${BRLfull(total)}`,
-        rows: matching,
-        mode: "mix",
-      });
-    });
+  tree.push({
+    id: "vt:total",
+    label: "TOTAL",
+    type: "total",
+    cells: [
+      { html: BRL(totalAR), color: "var(--green)", bold: true },
+      { html: BRL(totalAP), color: "var(--red)", bold: true },
+      { html: BRL(totalAR - totalAP), color: (totalAR - totalAP) >= 0 ? "var(--green)" : "var(--red)", bold: true },
+      { html: String(items.length), color: "var(--muted)" },
+    ],
+  });
+
+  renderTreeTable({
+    tree,
+    columns: [
+      { label: "Categoria / Parte", num: false },
+      { label: "Entradas", num: true },
+      { label: "Saídas", num: true },
+      { label: "Saldo", num: true },
+      { label: "Lançamentos", num: true },
+    ],
+    container: wrap,
+    expanded: vencPivotExpanded,
+    title: `${Object.keys(byCat).length} categorias`,
+    onRowClick: (id) => {
+      // sub-row (parte específica): mostra lançamentos daquela combinação
+      if (id.startsWith("vp:")) {
+        const [, cat, parte] = id.split(":");
+        const matching = items.filter(it => {
+          const itCat = (it.item || "(sem categoria)").trim() || "(sem categoria)";
+          const itParte = (it.parte || "(sem)").trim() || "(sem)";
+          return itCat === cat && itParte === parte;
+        });
+        const total = matching.reduce((s, it) => s + (it.valor || 0) * (it.tipo === "AP" ? -1 : 1), 0);
+        openDrawer({
+          title: `${parte} — ${cat}`,
+          sub: `${matching.length} lançamentos · saldo líquido ${BRLfull(total)}`,
+          rows: matching, mode: "mix",
+        });
+      }
+    },
   });
 }
 
@@ -1372,18 +1525,18 @@ const DRE_SECTIONS = [
   },
 ];
 
+const dreExpanded = new Set();  // state persistente: seções abertas
+let dreInitialized = false;
+
 function renderDRE() {
   const container = document.getElementById("dre-container");
-  // Filtrar AP+AR pela competência dentro do range
   const all = [...DATA.ar, ...allAP].filter(r => {
     if (!r.valor) return false;
     const cm = getCompMonth(r);
     if (!cm) return false;
-    const firstDay = cm + "-01";
-    return inRange(firstDay);
+    return inRange(cm + "-01");
   });
 
-  // Buckets: { subitem: { mes: total } }
   const buckets = {};
   const monthsSet = new Set();
   for (const r of all) {
@@ -1399,82 +1552,97 @@ function renderDRE() {
     return;
   }
 
-  // Render tabela
-  const cols = ["", ...months.map(fmtMonth), "Total"];
-  let html = `<table class="dre-table"><thead><tr>` +
-    cols.map((c, i) => `<th${i === 0 ? "" : " class='num'"}>${c}</th>`).join("") +
-    `</tr></thead><tbody>`;
-
+  // Construir árvore
+  const tree = [];
   let receitaTotal = months.map(() => 0);
   let despesaTotal = months.map(() => 0);
 
   for (const section of DRE_SECTIONS) {
-    // Calcula totais da seção
     const sectionTotalByMonth = months.map(() => 0);
-    const itemsWithData = [];
+    const children = [];
     for (const item of section.items) {
       const bucket = buckets[item];
       if (!bucket) continue;
       const monthVals = months.map(m => bucket[m] || 0);
       const total = monthVals.reduce((s, v) => s + v, 0);
       if (total === 0) continue;
-      itemsWithData.push({ name: item, monthVals, total });
       monthVals.forEach((v, i) => sectionTotalByMonth[i] += v);
+      children.push({
+        id: `sub:${item}`,
+        label: item,
+        section: section.type,
+        cells: [...monthVals.map(v => ({ html: v === 0 ? "—" : BRL(v) })), { html: BRL(total) }],
+      });
     }
-    if (!itemsWithData.length) continue;
+    if (!children.length) continue;
 
-    // Header da seção
-    html += `<tr class="section"><td>${section.name}</td>` +
-      sectionTotalByMonth.map(v => `<td>${v === 0 ? "—" : BRL(v)}</td>`).join("") +
-      `<td>${BRL(sectionTotalByMonth.reduce((s, v) => s + v, 0))}</td></tr>`;
+    const sectionTotal = sectionTotalByMonth.reduce((s, v) => s + v, 0);
+    tree.push({
+      id: `sec:${section.name}`,
+      label: section.name,
+      type: "section",
+      cells: [...sectionTotalByMonth.map(v => ({ html: v === 0 ? "—" : BRL(v), bold: true })), { html: BRL(sectionTotal), bold: true }],
+      children,
+    });
 
-    // Subitens
-    for (const item of itemsWithData) {
-      html += `<tr class="subitem clickable" data-section="${section.type}" data-item="${item.name.replace(/"/g, "&quot;")}">` +
-        `<td>${item.name}</td>` +
-        item.monthVals.map(v => `<td>${v === 0 ? "—" : BRL(v)}</td>`).join("") +
-        `<td>${BRL(item.total)}</td></tr>`;
-    }
-
-    // Acumular nos totais gerais
-    if (section.type === "in") {
-      sectionTotalByMonth.forEach((v, i) => receitaTotal[i] += v);
-    } else {
-      sectionTotalByMonth.forEach((v, i) => despesaTotal[i] += v);
-    }
+    if (section.type === "in") sectionTotalByMonth.forEach((v, i) => receitaTotal[i] += v);
+    else sectionTotalByMonth.forEach((v, i) => despesaTotal[i] += v);
   }
 
-  // Linha de RESULTADO LÍQUIDO
+  // Linha RESULTADO LÍQUIDO (sem children)
   const resultado = months.map((_, i) => receitaTotal[i] - despesaTotal[i]);
-  html += `<tr class="total"><td>RESULTADO LÍQUIDO</td>` +
-    resultado.map(v => `<td class="${v >= 0 ? 'dre-pos' : 'dre-neg'}">${BRL(v)}</td>`).join("") +
-    `<td class="${resultado.reduce((s, v) => s + v, 0) >= 0 ? 'dre-pos' : 'dre-neg'}">${BRL(resultado.reduce((s, v) => s + v, 0))}</td></tr>`;
+  const resTotal = resultado.reduce((s, v) => s + v, 0);
+  tree.push({
+    id: "resultado",
+    label: "RESULTADO LÍQUIDO",
+    type: "total",
+    cells: [
+      ...resultado.map(v => ({ html: BRL(v), color: v >= 0 ? "var(--green)" : "var(--red)", bold: true })),
+      { html: BRL(resTotal), color: resTotal >= 0 ? "var(--green)" : "var(--red)", bold: true },
+    ],
+  });
 
-  html += `</tbody></table>`;
-  container.innerHTML = html;
+  // Default: seções expandidas na primeira render
+  if (!dreInitialized) {
+    tree.forEach(n => { if (n.children) dreExpanded.add(n.id); });
+    dreInitialized = true;
+  }
 
-  // Click handler nas linhas de subitem
-  container.querySelectorAll("tr.clickable").forEach(tr => {
-    tr.addEventListener("click", () => {
-      const item = tr.dataset.item;
-      const isReceita = tr.dataset.section === "in";
+  const columns = [
+    { label: "Classificação", num: false },
+    ...months.map(m => ({ label: fmtMonth(m), num: true })),
+    { label: "Total", num: true },
+  ];
+
+  renderTreeTable({
+    tree,
+    columns,
+    container,
+    expanded: dreExpanded,
+    title: `${months.length} meses · ${tree.length - 1} seções`,
+    onRowClick: (id) => {
+      if (!id.startsWith("sub:")) return;
+      const item = id.slice(4);
+      // Encontra a seção desse item
+      const section = DRE_SECTIONS.find(s => s.items.includes(item));
+      const isReceita = section && section.type === "in";
       let rows = [];
       if (isReceita) {
         rows = DATA.ar.filter(r => {
           const cm = getCompMonth(r);
-          return cm && (buckets[item] && buckets[item][cm] !== undefined) && inRange(cm + "-01");
+          return cm && inRange(cm + "-01") && (r.pl_subitem || "Outros") === item;
         }).map(arRow);
       } else {
         rows = allAP.filter(r => (r.pl_subitem || "Outros") === item && inRange((getCompMonth(r) || "") + "-01")).map(apRow);
       }
       const total = rows.reduce((s, r) => s + (r.valor || 0), 0);
       openDrawer({
-        title: `${item}`,
+        title: item,
         sub: `${rows.length} lançamentos · ${BRLfull(total)}`,
         rows,
         mode: isReceita ? "ar" : "ap",
       });
-    });
+    },
   });
 }
 
@@ -1619,6 +1787,71 @@ document.getElementById("drawer-search").addEventListener("input", e => {
   renderDrawerBody();
 });
 
+const drawerPivotExpanded = new Set();
+
+function renderDrawerPivot(filtered, mode) {
+  const container = document.getElementById("drawer-pivot");
+  if (!container) return;
+  if (!filtered.length) { container.innerHTML = ""; return; }
+
+  const valColor = mode === "ar" ? "var(--green)" : "var(--red)";
+
+  // 2 níveis: categoria → parte (fornecedor/cliente)
+  const byCat = {};
+  for (const r of filtered) {
+    const cat = (r.item || "(sem categoria)").trim() || "(sem categoria)";
+    const parte = (r.parte || "(sem)").trim() || "(sem)";
+    if (!byCat[cat]) byCat[cat] = { total: 0, count: 0, byParte: {} };
+    byCat[cat].total += (r.valor || 0);
+    byCat[cat].count += 1;
+    if (!byCat[cat].byParte[parte]) byCat[cat].byParte[parte] = { total: 0, count: 0 };
+    byCat[cat].byParte[parte].total += (r.valor || 0);
+    byCat[cat].byParte[parte].count += 1;
+  }
+
+  const grandTotal = Object.values(byCat).reduce((s, v) => s + v.total, 0);
+  if (Object.keys(byCat).length <= 1) {
+    container.innerHTML = `<div style="color:var(--muted);font-size:12px">Categoria única — sem pivot a mostrar.</div>`;
+    return;
+  }
+
+  const tree = Object.entries(byCat)
+    .sort((a, b) => b[1].total - a[1].total)
+    .map(([cat, v]) => ({
+      id: `dp:${cat}`,
+      label: cat,
+      cells: [
+        { html: String(v.count), color: "var(--muted)" },
+        { html: BRL(v.total), color: valColor, bold: true },
+        { html: (grandTotal > 0 ? (v.total / grandTotal * 100).toFixed(1) : "0") + "%", color: "var(--muted)" },
+      ],
+      children: Object.entries(v.byParte)
+        .sort((a, b) => b[1].total - a[1].total)
+        .map(([parte, pv]) => ({
+          id: `dpp:${cat}:${parte}`,
+          label: parte,
+          cells: [
+            { html: String(pv.count), color: "var(--muted)" },
+            { html: BRL(pv.total), color: valColor, bold: true },
+            { html: (v.total > 0 ? (pv.total / v.total * 100).toFixed(1) : "0") + "%", color: "var(--muted)" },
+          ],
+        })),
+    }));
+
+  renderTreeTable({
+    tree,
+    columns: [
+      { label: "Categoria / Parte", num: false },
+      { label: "Lanç.", num: true },
+      { label: "Total", num: true },
+      { label: "% / dentro categ.", num: true },
+    ],
+    container,
+    expanded: drawerPivotExpanded,
+    title: `${Object.keys(byCat).length} categorias`,
+  });
+}
+
 function renderDrawerBody() {
   const { rows, mode, sortKey, sortAsc, search } = drawerState;
   let filtered = rows;
@@ -1697,41 +1930,17 @@ function renderDrawerBody() {
     }).join("") + "</tr>";
   }).join("");
 
-  // Pivot por Item Cash (categoria) — só faz sentido para modos com categoria
-  let pivotHtml = "";
-  if (mode !== "saldo") {
-    const byCat = {};
-    for (const r of filtered) {
-      const cat = (r.item || "(sem categoria)").trim() || "(sem categoria)";
-      if (!byCat[cat]) byCat[cat] = { total: 0, count: 0 };
-      byCat[cat].total += (r.valor || 0);
-      byCat[cat].count += 1;
-    }
-    const pivotRows = Object.entries(byCat)
-      .map(([cat, v]) => ({ cat, total: v.total, count: v.count }))
-      .sort((a, b) => b.total - a.total);
-    if (pivotRows.length > 1) {
-      const grandTotal = pivotRows.reduce((s, r) => s + r.total, 0);
-      const valColor = mode === "ar" ? "var(--green)" : "var(--red)";
-      const trs = pivotRows.map(r => {
-        const pct = grandTotal > 0 ? (r.total / grandTotal * 100) : 0;
-        return `<tr><td>${r.cat.replace(/</g, "&lt;")}</td>` +
-          `<td class="num" style="color:var(--muted)">${r.count}</td>` +
-          `<td class="num" style="color:${valColor};font-weight:600">${BRL(r.total)}</td>` +
-          `<td class="num" style="color:var(--muted)">${pct.toFixed(1)}%</td></tr>`;
-      }).join("");
-      pivotHtml = `
-        <div style="padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--bg);">
-          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 8px;">Pivot por categoria (Item Cash)</div>
-          <table class="dre-table" style="font-size: 12px;">
-            <thead><tr><th>Categoria</th><th class="num">Lanç.</th><th class="num">Total</th><th class="num">%</th></tr></thead>
-            <tbody>${trs}</tbody>
-          </table>
-        </div>`;
-    }
-  }
+  // Container do pivot (preenchido depois)
+  const pivotShell = (mode !== "saldo")
+    ? `<div id="drawer-pivot-shell" style="padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--bg);">
+         <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 8px;">Pivot por categoria (Item Cash)</div>
+         <div id="drawer-pivot"></div>
+       </div>`
+    : "";
 
-  body.innerHTML = pivotHtml + `<table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`;
+  body.innerHTML = pivotShell + `<table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`;
+  // Render pivot hierárquica (Categoria → fornecedor/cliente)
+  if (mode !== "saldo") renderDrawerPivot(filtered, mode);
   body.querySelectorAll("th[data-sort]").forEach(th => {
     th.addEventListener("click", () => {
       const k = th.dataset.sort;
