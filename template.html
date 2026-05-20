@@ -961,14 +961,32 @@ function renderVenc() {
       <td class="num" style="color: ${it.tipo === 'AR' ? 'var(--green)' : 'var(--red)'}">${it.tipo === "AR" ? "+" : "−"} ${BRLfull(it.valor)}</td>
     </tr>`).join("");
 
+  // Totais do ano corrente (independente do filtro de período)
+  const ano = TODAY_ISO.slice(0, 4);
+  let yearIn = 0, yearOut = 0;
+  DATA.ar.forEach(r => {
+    if (!r.valor) return;
+    const d = r.recebimento || r.previsao;
+    if (d && d.slice(0, 4) === ano) yearIn += r.valor;
+  });
+  allAP.forEach(r => {
+    if (!r.valor) return;
+    const d = r.pagamento || r.previsao;
+    if (d && d.slice(0, 4) === ano) yearOut += r.valor;
+  });
+
   list.innerHTML = `
     <table>
       <thead><tr><th>Tipo</th><th>Vencimento orig.</th><th>Previsão pgto/recb.</th><th>Cliente / Fornecedor</th><th>Descrição</th><th>Situação</th><th style="text-align:right">Valor</th></tr></thead>
       <tbody>${rows}</tbody>
       <tfoot>
         <tr style="background: var(--surface-2); font-weight: 600;">
-          <td colspan="6">Saldo líquido (${items.length} lançamentos)</td>
+          <td colspan="6">Saldo líquido do período (${items.length} lançamentos)</td>
           <td class="num" style="color: ${(totalIn - totalOut) >= 0 ? 'var(--green)' : 'var(--red)'}">${BRLfull(totalIn - totalOut)}</td>
+        </tr>
+        <tr style="background: var(--bg); color: var(--muted); font-size: 12px;">
+          <td colspan="6">Acumulado ${ano} — entradas <span style="color:var(--green);font-weight:600">${BRLfull(yearIn)}</span> · saídas <span style="color:var(--red);font-weight:600">${BRLfull(yearOut)}</span></td>
+          <td class="num" style="color: ${(yearIn - yearOut) >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:600">${BRLfull(yearIn - yearOut)}</td>
         </tr>
       </tfoot>
     </table>`;
