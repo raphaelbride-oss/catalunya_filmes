@@ -189,6 +189,7 @@ main { padding: 24px 32px 64px; max-width: 1600px; margin: 0 auto; }
     <span class="label">Período</span>
     <div class="presets" id="presets">
       <button data-preset="last-week">Última semana</button>
+      <button data-preset="this-week">Esta semana</button>
       <button data-preset="next-week">Próxima semana</button>
       <button data-preset="last-month">Último mês</button>
       <button data-preset="this-month" class="active">Mês atual</button>
@@ -244,6 +245,12 @@ main { padding: 24px 32px 64px; max-width: 1600px; margin: 0 auto; }
   </div>
 
   <section class="card wide">
+    <h2>Principais devedores</h2>
+    <div class="desc">Clientes com maior valor a receber pendente (recebimento ainda não confirmado). Clique numa barra para detalhar.</div>
+    <div class="chart-wrap" style="height: 360px;"><canvas id="chart-devedores"></canvas></div>
+  </section>
+
+  <section class="card wide">
     <h2>Vencimentos no período</h2>
     <div class="desc">Lista filtrada pelo período selecionado.</div>
     <div class="tabs" id="venc-tabs" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -255,6 +262,10 @@ main { padding: 24px 32px 64px; max-width: 1600px; margin: 0 auto; }
         style="flex:1;min-width:200px;background:var(--surface);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px;font-size:13px;margin-left:auto">
     </div>
     <div class="list" id="venc-list"></div>
+
+    <h3 style="margin: 28px 0 4px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted);">Pivot por categoria (Item Cash)</h3>
+    <div class="desc">Agregação dos vencimentos do período por categoria operacional.</div>
+    <div class="dre-wrap" id="venc-pivot"></div>
   </section>
   </div><!-- /tab fluxo -->
 
@@ -421,6 +432,8 @@ function computePreset(id) {
   switch (id) {
     case "last-week":
       return [addDays(thisMon, -7), addDays(thisMon, -1)];
+    case "this-week":
+      return [thisMon, thisSun];
     case "next-week":
       return [addDays(thisSun, 1), addDays(thisSun, 7)];
     case "this-month":
@@ -511,7 +524,7 @@ function arRow(r) {
 // ============================================================
 // RENDER FUNCTIONS
 // ============================================================
-let chartSaldo = null, chartFluxo = null, chartCat = null;
+let chartSaldo = null, chartFluxo = null, chartCat = null, chartDevedores = null;
 let activeCatMode = "ap-cat";
 let activeVencFilter = "all";
 
@@ -921,6 +934,87 @@ document.querySelectorAll(".toggle button").forEach(b => {
   });
 });
 
+// ============================================================
+// PRINCIPAIS DEVEDORES — AR pendente por cliente (não filtra por período;
+// mostra todos os créditos em aberto, ordenados por valor)
+// ============================================================
+function renderDevedores() {
+  const byClient = {};
+  for (const r of DATA.ar) {
+    if (!r.valor) continue;
+    if (r.recebimento) continue; // já recebido
+    const cliente = (r.cliente || "(sem cliente)").trim();
+    byClient[cliente] = (byClient[cliente] || 0) + r.valor;
+  }
+  let entries = Object.entries(byClient)
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1]);
+
+  const ctx = document.getElementById("chart-devedores");
+  if (chartDevedores) chartDevedores.destroy();
+  if (!entries.length) {
+    ctx.getContext("2d").clearRect(0, 0, 9999, 9999);
+    return;
+  }
+  const TOP = 15;
+  let othersTotal = 0;
+  if (entries.length > TOP) {
+    othersTotal = entries.slice(TOP).reduce((s, [, v]) => s + v, 0);
+    entries = entries.slice(0, TOP);
+  }
+  const fullLabels = entries.map(([k]) => k).concat(othersTotal > 0 ? ["Outros"] : []);
+  const labels = fullLabels.map(k => k.length > 38 ? k.slice(0, 36) + "…" : k);
+  const data = entries.map(([, v]) => v).concat(othersTotal > 0 ? [othersTotal] : []);
+
+  chartDevedores = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: data.map((_, i) => i === data.length - 1 && othersTotal > 0 ? "#a1a1aa" : "#16a34a"),
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      indexAxis: "y",
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: items => fullLabels[items[0].dataIndex],
+            label: c => `A receber: ${BRLfull(c.parsed.x)}`,
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: "#71717a", callback: v => BRL(v) }, grid: { color: "#e4e4e7" } },
+        y: { ticks: { color: "#71717a", font: { size: 12 } }, grid: { display: false } },
+      },
+      onClick: (evt, elems) => {
+        if (!elems.length) return;
+        const idx = elems[0].index;
+        const cliente = fullLabels[idx];
+        let rows;
+        if (cliente === "Outros") {
+          const topSet = new Set(fullLabels.slice(0, -1));
+          rows = DATA.ar.filter(r => !r.recebimento && r.valor && !topSet.has((r.cliente || "(sem cliente)").trim())).map(arRow);
+        } else {
+          rows = DATA.ar.filter(r => !r.recebimento && r.valor && (r.cliente || "(sem cliente)").trim() === cliente).map(arRow);
+        }
+        const total = rows.reduce((s, r) => s + (r.valor || 0), 0);
+        openDrawer({
+          title: `A receber — ${cliente}`,
+          sub: `${rows.length} lançamentos · ${BRLfull(total)}`,
+          rows, mode: "ar",
+        });
+      },
+      onHover: (evt, elems) => { evt.native.target.style.cursor = elems.length ? "pointer" : "default"; },
+    },
+  });
+}
+
 let vencSearch = "";
 
 function renderVenc() {
@@ -952,6 +1046,7 @@ function renderVenc() {
 
   if (!items.length) {
     list.innerHTML = `<div class="empty">Nada nesse recorte.</div>`;
+    renderVencPivot([]);
     return;
   }
 
@@ -998,6 +1093,77 @@ function renderVenc() {
         </tr>
       </tfoot>
     </table>`;
+
+  renderVencPivot(items);
+}
+
+// Pivot por Item Cash: linhas = categoria, colunas = Entradas / Saídas / Saldo
+function renderVencPivot(items) {
+  const wrap = document.getElementById("venc-pivot");
+  if (!items || !items.length) { wrap.innerHTML = ""; return; }
+
+  // Agregar
+  const byCat = {}; // { item_cash: { ar: 0, ap: 0 } }
+  for (const it of items) {
+    const cat = (it.item || "(sem categoria)").trim() || "(sem categoria)";
+    if (!byCat[cat]) byCat[cat] = { ar: 0, ap: 0 };
+    if (it.tipo === "AR") byCat[cat].ar += (it.valor || 0);
+    else byCat[cat].ap += (it.valor || 0);
+  }
+  // Ordenar por valor absoluto total
+  const rows = Object.entries(byCat)
+    .map(([cat, v]) => ({ cat, ar: v.ar, ap: v.ap, saldo: v.ar - v.ap }))
+    .sort((a, b) => Math.abs(b.ap + b.ar) - Math.abs(a.ap + a.ar));
+
+  const totalAR = rows.reduce((s, r) => s + r.ar, 0);
+  const totalAP = rows.reduce((s, r) => s + r.ap, 0);
+  const totalSaldo = totalAR - totalAP;
+
+  let html = `<table class="dre-table">
+    <thead><tr>
+      <th>Item Cash (categoria)</th>
+      <th class="num">Entradas</th>
+      <th class="num">Saídas</th>
+      <th class="num">Saldo</th>
+      <th class="num">Lançamentos</th>
+    </tr></thead><tbody>`;
+  for (const r of rows) {
+    const saldoColor = r.saldo >= 0 ? "dre-pos" : "dre-neg";
+    const count = items.filter(it => (it.item || "(sem categoria)").trim() === r.cat).length;
+    html += `<tr class="clickable" data-cat="${r.cat.replace(/"/g, "&quot;")}">
+      <td>${r.cat.replace(/</g, "&lt;")}</td>
+      <td class="num" style="color: ${r.ar > 0 ? 'var(--green)' : 'var(--muted)'}">${r.ar > 0 ? BRL(r.ar) : "—"}</td>
+      <td class="num" style="color: ${r.ap > 0 ? 'var(--red)' : 'var(--muted)'}">${r.ap > 0 ? BRL(r.ap) : "—"}</td>
+      <td class="num ${saldoColor}" style="font-weight: 600">${BRL(r.saldo)}</td>
+      <td class="num" style="color: var(--muted)">${count}</td>
+    </tr>`;
+  }
+  html += `</tbody><tfoot>
+    <tr class="total">
+      <td>TOTAL</td>
+      <td class="num" style="color: var(--green)">${BRL(totalAR)}</td>
+      <td class="num" style="color: var(--red)">${BRL(totalAP)}</td>
+      <td class="num ${totalSaldo >= 0 ? 'dre-pos' : 'dre-neg'}">${BRL(totalSaldo)}</td>
+      <td class="num" style="color: var(--muted)">${items.length}</td>
+    </tr>
+  </tfoot></table>`;
+
+  wrap.innerHTML = html;
+
+  // Click: drawer com lançamentos daquela categoria
+  wrap.querySelectorAll("tr.clickable").forEach(tr => {
+    tr.addEventListener("click", () => {
+      const cat = tr.dataset.cat;
+      const matching = items.filter(it => (it.item || "(sem categoria)").trim() === cat);
+      const total = matching.reduce((s, it) => s + (it.valor || 0) * (it.tipo === "AP" ? -1 : 1), 0);
+      openDrawer({
+        title: `Vencimentos — ${cat}`,
+        sub: `${matching.length} lançamentos · saldo líquido ${BRLfull(total)}`,
+        rows: matching,
+        mode: "mix",
+      });
+    });
+  });
 }
 
 document.getElementById("venc-search").addEventListener("input", e => {
@@ -1020,6 +1186,7 @@ function renderAll() {
   renderSaldo();
   renderFluxo();
   renderCat();
+  renderDevedores();
   renderVenc();
   renderDRE();
   renderProjetos();
