@@ -244,11 +244,19 @@ main { padding: 24px 32px 64px; max-width: 1600px; margin: 0 auto; }
     </section>
   </div>
 
-  <section class="card wide">
-    <h2>Principais devedores</h2>
-    <div class="desc">Clientes com maior valor a receber pendente (recebimento ainda não confirmado). Clique numa barra para detalhar.</div>
-    <div class="chart-wrap" style="height: 360px;"><canvas id="chart-devedores"></canvas></div>
-  </section>
+  <div class="grid">
+    <section class="card">
+      <h2>Principais devedores</h2>
+      <div class="desc">Clientes que mais devem para você (AR pendente). Clique numa barra para detalhar.</div>
+      <div class="chart-wrap" style="height: 360px;"><canvas id="chart-devedores"></canvas></div>
+    </section>
+
+    <section class="card">
+      <h2>Principais credores</h2>
+      <div class="desc">Fornecedores que você mais deve (AP pendente). Clique numa barra para detalhar.</div>
+      <div class="chart-wrap" style="height: 360px;"><canvas id="chart-credores"></canvas></div>
+    </section>
+  </div>
 
   <section class="card wide">
     <h2>Vencimentos no período</h2>
@@ -524,7 +532,7 @@ function arRow(r) {
 // ============================================================
 // RENDER FUNCTIONS
 // ============================================================
-let chartSaldo = null, chartFluxo = null, chartCat = null, chartDevedores = null;
+let chartSaldo = null, chartFluxo = null, chartCat = null, chartDevedores = null, chartCredores = null;
 let activeCatMode = "ap-cat";
 let activeVencFilter = "all";
 
@@ -1015,6 +1023,86 @@ function renderDevedores() {
   });
 }
 
+// ============================================================
+// PRINCIPAIS CREDORES — AP pendente por fornecedor
+// ============================================================
+function renderCredores() {
+  const byFornecedor = {};
+  for (const r of allAP) {
+    if (!r.valor) continue;
+    if (r.pagamento) continue; // já pago
+    const f = (r.fornecedor || "(sem fornecedor)").trim();
+    byFornecedor[f] = (byFornecedor[f] || 0) + r.valor;
+  }
+  let entries = Object.entries(byFornecedor)
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1]);
+
+  const ctx = document.getElementById("chart-credores");
+  if (chartCredores) chartCredores.destroy();
+  if (!entries.length) {
+    ctx.getContext("2d").clearRect(0, 0, 9999, 9999);
+    return;
+  }
+  const TOP = 15;
+  let othersTotal = 0;
+  if (entries.length > TOP) {
+    othersTotal = entries.slice(TOP).reduce((s, [, v]) => s + v, 0);
+    entries = entries.slice(0, TOP);
+  }
+  const fullLabels = entries.map(([k]) => k).concat(othersTotal > 0 ? ["Outros"] : []);
+  const labels = fullLabels.map(k => k.length > 38 ? k.slice(0, 36) + "…" : k);
+  const data = entries.map(([, v]) => v).concat(othersTotal > 0 ? [othersTotal] : []);
+
+  chartCredores = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: data.map((_, i) => i === data.length - 1 && othersTotal > 0 ? "#a1a1aa" : "#dc2626"),
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      indexAxis: "y",
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: items => fullLabels[items[0].dataIndex],
+            label: c => `A pagar: ${BRLfull(c.parsed.x)}`,
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: "#71717a", callback: v => BRL(v) }, grid: { color: "#e4e4e7" } },
+        y: { ticks: { color: "#71717a", font: { size: 12 } }, grid: { display: false } },
+      },
+      onClick: (evt, elems) => {
+        if (!elems.length) return;
+        const idx = elems[0].index;
+        const fornecedor = fullLabels[idx];
+        let rows;
+        if (fornecedor === "Outros") {
+          const topSet = new Set(fullLabels.slice(0, -1));
+          rows = allAP.filter(r => !r.pagamento && r.valor && !topSet.has((r.fornecedor || "(sem fornecedor)").trim())).map(apRow);
+        } else {
+          rows = allAP.filter(r => !r.pagamento && r.valor && (r.fornecedor || "(sem fornecedor)").trim() === fornecedor).map(apRow);
+        }
+        const total = rows.reduce((s, r) => s + (r.valor || 0), 0);
+        openDrawer({
+          title: `A pagar — ${fornecedor}`,
+          sub: `${rows.length} lançamentos · ${BRLfull(total)}`,
+          rows, mode: "ap",
+        });
+      },
+      onHover: (evt, elems) => { evt.native.target.style.cursor = elems.length ? "pointer" : "default"; },
+    },
+  });
+}
+
 let vencSearch = "";
 
 function renderVenc() {
@@ -1187,6 +1275,7 @@ function renderAll() {
   renderFluxo();
   renderCat();
   renderDevedores();
+  renderCredores();
   renderVenc();
   renderDRE();
   renderProjetos();
