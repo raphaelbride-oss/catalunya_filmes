@@ -246,11 +246,13 @@ main { padding: 24px 32px 64px; max-width: 1600px; margin: 0 auto; }
   <section class="card wide">
     <h2>Vencimentos no período</h2>
     <div class="desc">Lista filtrada pelo período selecionado.</div>
-    <div class="tabs" id="venc-tabs">
+    <div class="tabs" id="venc-tabs" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <button data-flt="all" class="active">Todos</button>
       <button data-flt="ap">Só saídas</button>
       <button data-flt="ar">Só entradas</button>
       <button data-flt="atrasado">Só atrasados</button>
+      <input type="search" id="venc-search" placeholder="Filtrar por fornecedor/cliente…" autocomplete="off"
+        style="flex:1;min-width:200px;background:var(--surface);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:6px;font-size:13px;margin-left:auto">
     </div>
     <div class="list" id="venc-list"></div>
   </section>
@@ -492,10 +494,10 @@ function getFilteredSaldo() {
 
 // Normalizers para o drawer
 function apRow(r) {
-  return { data: r.previsao || r.vencimento, item: r.item_cash, parte: r.fornecedor, desc: r.descricao || r.job, valor: r.valor, tipo: "AP", situacao: r.situacao, empresa: r.empresa, job: r.job };
+  return { data: r.previsao || r.vencimento, vencimento: r.vencimento, previsao: r.previsao, item: r.item_cash, parte: r.fornecedor, desc: r.descricao || r.job, valor: r.valor, tipo: "AP", situacao: r.situacao, empresa: r.empresa, job: r.job };
 }
 function arRow(r) {
-  return { data: r.previsao || r.vencimento, item: r.tipo_conta, parte: r.cliente, desc: r.descricao || r.job, valor: r.valor, tipo: "AR", situacao: r.situacao, empresa: r.empresa, job: r.job };
+  return { data: r.previsao || r.vencimento, vencimento: r.vencimento, previsao: r.previsao, item: r.tipo_conta, parte: r.cliente, desc: r.descricao || r.job, valor: r.valor, tipo: "AR", situacao: r.situacao, empresa: r.empresa, job: r.job };
 }
 
 // ============================================================
@@ -911,6 +913,8 @@ document.querySelectorAll(".toggle button").forEach(b => {
   });
 });
 
+let vencSearch = "";
+
 function renderVenc() {
   const pendAP = getFilteredAP();
   const pendAR = getFilteredAR();
@@ -926,6 +930,16 @@ function renderVenc() {
   if (activeVencFilter === "atrasado") {
     items = getAtrasadosAP().map(apRow);
   }
+
+  // Filtro de busca por fornecedor/cliente (também tenta match em descrição/job)
+  if (vencSearch) {
+    const q = vencSearch.toLowerCase();
+    items = items.filter(it => {
+      const hay = [it.parte, it.desc, it.job, it.empresa].filter(Boolean).join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
   items.sort((a, b) => (a.data || "").localeCompare(b.data || ""));
 
   if (!items.length) {
@@ -939,7 +953,8 @@ function renderVenc() {
   const rows = items.map(it => `
     <tr>
       <td><span class="tag ${it.tipo === "AR" ? "in" : "out"}">${it.tipo === "AR" ? "Entra" : "Sai"}</span></td>
-      <td>${dateBR(it.data)}</td>
+      <td>${dateBR(it.vencimento)}</td>
+      <td>${dateBR(it.previsao)}</td>
       <td>${(it.parte || "—").replace(/</g,"&lt;")}</td>
       <td style="color: var(--muted)">${((it.desc || "").slice(0, 80)).replace(/</g,"&lt;")}</td>
       <td><span class="tag ${(it.situacao || "").toLowerCase()}">${it.situacao || ""}</span></td>
@@ -948,16 +963,21 @@ function renderVenc() {
 
   list.innerHTML = `
     <table>
-      <thead><tr><th>Tipo</th><th>Data</th><th>Cliente / Fornecedor</th><th>Descrição</th><th>Situação</th><th style="text-align:right">Valor</th></tr></thead>
+      <thead><tr><th>Tipo</th><th>Vencimento orig.</th><th>Previsão pgto/recb.</th><th>Cliente / Fornecedor</th><th>Descrição</th><th>Situação</th><th style="text-align:right">Valor</th></tr></thead>
       <tbody>${rows}</tbody>
       <tfoot>
         <tr style="background: var(--surface-2); font-weight: 600;">
-          <td colspan="5">Saldo líquido (${items.length} lançamentos)</td>
+          <td colspan="6">Saldo líquido (${items.length} lançamentos)</td>
           <td class="num" style="color: ${(totalIn - totalOut) >= 0 ? 'var(--green)' : 'var(--red)'}">${BRLfull(totalIn - totalOut)}</td>
         </tr>
       </tfoot>
     </table>`;
 }
+
+document.getElementById("venc-search").addEventListener("input", e => {
+  vencSearch = e.target.value.trim();
+  renderVenc();
+});
 
 document.querySelectorAll("#venc-tabs button").forEach(b => {
   b.addEventListener("click", () => {
