@@ -1697,7 +1697,41 @@ function renderDrawerBody() {
     }).join("") + "</tr>";
   }).join("");
 
-  body.innerHTML = `<table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`;
+  // Pivot por Item Cash (categoria) — só faz sentido para modos com categoria
+  let pivotHtml = "";
+  if (mode !== "saldo") {
+    const byCat = {};
+    for (const r of filtered) {
+      const cat = (r.item || "(sem categoria)").trim() || "(sem categoria)";
+      if (!byCat[cat]) byCat[cat] = { total: 0, count: 0 };
+      byCat[cat].total += (r.valor || 0);
+      byCat[cat].count += 1;
+    }
+    const pivotRows = Object.entries(byCat)
+      .map(([cat, v]) => ({ cat, total: v.total, count: v.count }))
+      .sort((a, b) => b.total - a.total);
+    if (pivotRows.length > 1) {
+      const grandTotal = pivotRows.reduce((s, r) => s + r.total, 0);
+      const valColor = mode === "ar" ? "var(--green)" : "var(--red)";
+      const trs = pivotRows.map(r => {
+        const pct = grandTotal > 0 ? (r.total / grandTotal * 100) : 0;
+        return `<tr><td>${r.cat.replace(/</g, "&lt;")}</td>` +
+          `<td class="num" style="color:var(--muted)">${r.count}</td>` +
+          `<td class="num" style="color:${valColor};font-weight:600">${BRL(r.total)}</td>` +
+          `<td class="num" style="color:var(--muted)">${pct.toFixed(1)}%</td></tr>`;
+      }).join("");
+      pivotHtml = `
+        <div style="padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--bg);">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 8px;">Pivot por categoria (Item Cash)</div>
+          <table class="dre-table" style="font-size: 12px;">
+            <thead><tr><th>Categoria</th><th class="num">Lanç.</th><th class="num">Total</th><th class="num">%</th></tr></thead>
+            <tbody>${trs}</tbody>
+          </table>
+        </div>`;
+    }
+  }
+
+  body.innerHTML = pivotHtml + `<table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`;
   body.querySelectorAll("th[data-sort]").forEach(th => {
     th.addEventListener("click", () => {
       const k = th.dataset.sort;
