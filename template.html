@@ -172,9 +172,10 @@ main { padding: 24px 32px 64px; max-width: 1600px; margin: 0 auto; }
     <h2>Entradas vs Saídas por mês</h2>
     <div class="desc">
       <span class="legend-inline"><span class="dot" style="background: #2da44e"></span>Entradas — Realizado</span>
-      <span class="legend-inline"><span class="dot" style="background: #3fb950; opacity: 0.5"></span>Entradas — Previsto</span>
+      <span class="legend-inline"><span class="dot" style="background: #3fb950; opacity: 0.5"></span>Entradas — A realizar</span>
       <span class="legend-inline"><span class="dot" style="background: #cf222e"></span>Saídas — Realizado</span>
-      <span class="legend-inline"><span class="dot" style="background: #f85149; opacity: 0.5"></span>Saídas — Previsto</span>
+      <span class="legend-inline"><span class="dot" style="background: #f85149; opacity: 0.5"></span>Saídas — A realizar</span>
+      <span class="legend-inline"><span class="dot" style="background: #d29922"></span>Atrasado</span>
       <span class="legend-inline"><span class="dot" style="background: #58a6ff"></span>Saldo do mês</span>
     </div>
     <div class="chart-wrap" style="height: 380px;"><canvas id="chart-fluxo"></canvas></div>
@@ -641,13 +642,12 @@ function renderSaldo() {
 }
 
 function renderFluxo() {
-  // 4 categorias por mês:
-  //  - AR realizado: agrupado por DATA DE RECEBIMENTO (coluna E)
-  //  - AR previsto:  agrupado por PREVISÃO RECEBIMENTO (coluna D) — apenas linhas SEM recebimento
-  //  - AP realizado: agrupado por DATA DE PAGAMENTO (coluna H)
-  //  - AP previsto:  agrupado por PREVISÃO PAGAMENTO (coluna G) — apenas linhas SEM pagamento
-  const byMonth = {}; // { "2026-05": { arAct, arFcst, apAct, apFcst } }
-  const ensure = k => (byMonth[k] = byMonth[k] || { arAct: 0, arFcst: 0, apAct: 0, apFcst: 0 });
+  // 3 estados por lado (AR e AP), 6 categorias no total:
+  //  - Realizado:   data de execução preenchida (pagamento/recebimento)
+  //  - A realizar:  sem execução, previsão >= hoje (ainda vai acontecer)
+  //  - Atrasado:    sem execução, previsão < hoje (era pra ter acontecido)
+  const byMonth = {};
+  const ensure = k => (byMonth[k] = byMonth[k] || { arAct: 0, arFcst: 0, arLate: 0, apAct: 0, apFcst: 0, apLate: 0 });
 
   DATA.ar.forEach(r => {
     if (!r.valor) return;
@@ -656,7 +656,9 @@ function renderFluxo() {
       ensure(monthKey(r.recebimento)).arAct += r.valor;
     } else if (r.previsao) {
       if (!inRange(r.previsao)) return;
-      ensure(monthKey(r.previsao)).arFcst += r.valor;
+      const bucket = ensure(monthKey(r.previsao));
+      if (r.previsao < TODAY_ISO) bucket.arLate += r.valor;
+      else bucket.arFcst += r.valor;
     }
   });
   allAP.forEach(r => {
@@ -666,7 +668,9 @@ function renderFluxo() {
       ensure(monthKey(r.pagamento)).apAct += r.valor;
     } else if (r.previsao) {
       if (!inRange(r.previsao)) return;
-      ensure(monthKey(r.previsao)).apFcst += r.valor;
+      const bucket = ensure(monthKey(r.previsao));
+      if (r.previsao < TODAY_ISO) bucket.apLate += r.valor;
+      else bucket.apFcst += r.valor;
     }
   });
 
@@ -679,19 +683,23 @@ function renderFluxo() {
 
   const arAct  = months.map(m => byMonth[m].arAct);
   const arFcst = months.map(m => byMonth[m].arFcst);
+  const arLate = months.map(m => byMonth[m].arLate);
   const apAct  = months.map(m => byMonth[m].apAct);
   const apFcst = months.map(m => byMonth[m].apFcst);
-  const net = months.map((m, i) => (arAct[i] + arFcst[i]) - (apAct[i] + apFcst[i]));
+  const apLate = months.map(m => byMonth[m].apLate);
+  const net = months.map((m, i) => (arAct[i] + arFcst[i] + arLate[i]) - (apAct[i] + apFcst[i] + apLate[i]));
 
   chartFluxo = new Chart(document.getElementById("chart-fluxo"), {
     type: "bar",
     data: {
       labels: months.map(fmtMonth),
       datasets: [
-        { label: "Entradas — Realizado", data: arAct,  backgroundColor: "#2da44e", stack: "ar", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
-        { label: "Entradas — Previsto",  data: arFcst, backgroundColor: "rgba(63,185,80,0.55)", borderColor: "#3fb950", borderWidth: { top: 1, left: 1, right: 1, bottom: 0 }, stack: "ar", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
-        { label: "Saídas — Realizado",  data: apAct,  backgroundColor: "#cf222e", stack: "ap", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
-        { label: "Saídas — Previsto",   data: apFcst, backgroundColor: "rgba(248,81,73,0.55)", borderColor: "#f85149", borderWidth: { top: 1, left: 1, right: 1, bottom: 0 }, stack: "ap", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
+        { label: "Entradas — Realizado",   data: arAct,  backgroundColor: "#2da44e", stack: "ar", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
+        { label: "Entradas — Atrasado",    data: arLate, backgroundColor: "#d29922", stack: "ar", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
+        { label: "Entradas — A realizar",  data: arFcst, backgroundColor: "rgba(63,185,80,0.55)", borderColor: "#3fb950", borderWidth: { top: 1, left: 1, right: 1, bottom: 0 }, stack: "ar", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
+        { label: "Saídas — Realizado",    data: apAct,  backgroundColor: "#cf222e", stack: "ap", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
+        { label: "Saídas — Atrasado",     data: apLate, backgroundColor: "#d29922", stack: "ap", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
+        { label: "Saídas — A realizar",   data: apFcst, backgroundColor: "rgba(248,81,73,0.55)", borderColor: "#f85149", borderWidth: { top: 1, left: 1, right: 1, bottom: 0 }, stack: "ap", borderRadius: { topLeft: 4, topRight: 4 }, order: 2 },
         { label: "Saldo do mês", data: net, type: "line", borderColor: "#58a6ff", backgroundColor: "#58a6ff", pointRadius: 3, borderWidth: 2, tension: 0.2, order: 1, yAxisID: "y" },
       ],
     },
@@ -702,12 +710,15 @@ function renderFluxo() {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: c => `${c.dataset.label}: ${BRLfull(c.parsed.y)}`,
+            label: c => {
+              if (c.parsed.y === 0 || c.parsed.y == null) return null;
+              return `${c.dataset.label}: ${BRLfull(c.parsed.y)}`;
+            },
             footer: items => {
               if (!items.length) return "";
               const monthIdx = items[0].dataIndex;
-              const totalIn = arAct[monthIdx] + arFcst[monthIdx];
-              const totalOut = apAct[monthIdx] + apFcst[monthIdx];
+              const totalIn = arAct[monthIdx] + arFcst[monthIdx] + arLate[monthIdx];
+              const totalOut = apAct[monthIdx] + apFcst[monthIdx] + apLate[monthIdx];
               return `\nTotal entradas: ${BRLfull(totalIn)}\nTotal saídas: ${BRLfull(totalOut)}\nSaldo: ${BRLfull(totalIn - totalOut)}`;
             },
           },
@@ -727,14 +738,20 @@ function renderFluxo() {
           rows = DATA.ar.filter(r => r.recebimento && r.recebimento.slice(0,7) === month && inRange(r.recebimento)).map(arRow);
           title = `Entradas realizadas em ${fmtMonth(month)}`; mode = "ar";
         } else if (dsIdx === 1) {
-          rows = DATA.ar.filter(r => !r.recebimento && r.previsao && r.previsao.slice(0,7) === month && inRange(r.previsao)).map(arRow);
-          title = `Entradas previstas em ${fmtMonth(month)}`; mode = "ar";
+          rows = DATA.ar.filter(r => !r.recebimento && r.previsao && r.previsao.slice(0,7) === month && inRange(r.previsao) && r.previsao < TODAY_ISO).map(arRow);
+          title = `Entradas atrasadas em ${fmtMonth(month)}`; mode = "ar";
         } else if (dsIdx === 2) {
+          rows = DATA.ar.filter(r => !r.recebimento && r.previsao && r.previsao.slice(0,7) === month && inRange(r.previsao) && r.previsao >= TODAY_ISO).map(arRow);
+          title = `Entradas a realizar em ${fmtMonth(month)}`; mode = "ar";
+        } else if (dsIdx === 3) {
           rows = allAP.filter(r => r.pagamento && r.pagamento.slice(0,7) === month && inRange(r.pagamento)).map(apRow);
           title = `Saídas realizadas em ${fmtMonth(month)}`; mode = "ap";
-        } else if (dsIdx === 3) {
-          rows = allAP.filter(r => !r.pagamento && r.previsao && r.previsao.slice(0,7) === month && inRange(r.previsao)).map(apRow);
-          title = `Saídas previstas em ${fmtMonth(month)}`; mode = "ap";
+        } else if (dsIdx === 4) {
+          rows = allAP.filter(r => !r.pagamento && r.previsao && r.previsao.slice(0,7) === month && inRange(r.previsao) && r.previsao < TODAY_ISO).map(apRow);
+          title = `Saídas atrasadas em ${fmtMonth(month)}`; mode = "ap";
+        } else if (dsIdx === 5) {
+          rows = allAP.filter(r => !r.pagamento && r.previsao && r.previsao.slice(0,7) === month && inRange(r.previsao) && r.previsao >= TODAY_ISO).map(apRow);
+          title = `Saídas a realizar em ${fmtMonth(month)}`; mode = "ap";
         } else {
           DATA.ar.forEach(r => {
             const d = r.recebimento || r.previsao;
