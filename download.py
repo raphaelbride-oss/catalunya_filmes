@@ -1,69 +1,86 @@
 #!/usr/bin/env python3
 """Baixa a planilha do Google Drive como XLSX para /tmp/planilha.xlsx.
 
-Autentica com Service Account. As credenciais (JSON) podem vir de:
-  - var de ambiente GOOGLE_CREDENTIALS_JSON (conteúdo do JSON em string)
-  - arquivo apontado por GOOGLE_APPLICATION_CREDENTIALS
-  - arquivo ./service-account.json no diretório atual
+Usa o token OAuth gerenciado pelo rclone (~/.config/rclone/rclone.conf,
+remote "gdrive"). Não precisa de Service Account nem GCP project — usa
+sua autenticação pessoal já feita via `rclone config`.
 
-ID da planilha vem de:
-  - var de ambiente SHEET_ID
-  - argumento --sheet-id
+Antes do download, força o rclone a renovar o token se necessário.
 """
-import argparse
-import io
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
-
+SHEET_ID = os.environ.get(
+    "SHEET_ID",
+    "1YQAYw3wpjRt_GArgqKmbp1CICLeH_7edET-bdbTC75U",
+)
+OUT = Path("/tmp/planilha.xlsx")
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+RCLONE_CONF = Path.home() / ".config/rclone/rclone.conf"
+RCLONE_REMOTE = "gdrive"
 
 
-def load_credentials():
-    raw = os.environ.get("GOOGLE_CREDENTIALS_JSON")
-    if raw:
-        info = json.loads(raw)
-        return service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
-    path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") or "./service-account.json"
-    if Path(path).exists():
-        return service_account.Credentials.from_service_account_file(path, scopes=SCOPES)
-    raise SystemExit(
-        "Credenciais não encontradas. Defina GOOGLE_CREDENTIALS_JSON (env)\n"
-        "ou GOOGLE_APPLICATION_CREDENTIALS apontando para service-account.json\n"
-        "ou coloque service-account.json no diretório atual."
+def refresh_rclone_token():
+    """Força o rclone a renovar o token OAuth se estiver expirado."""
+    try:
+        subprocess.run(
+            ["rclone", "about", f"{RCLONE_REMOTE}:"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            check=True,
+            timeout=30,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+        sys.exit(f"rclone falhou ao renovar token: {e}")
+
+
+def read_access_token():
+    if not RCLONE_CONF.exists():
+        sys.exit(f"rclone config não encontrado em {RCLONE_CONF}")
+    text = RCLONE_CONF.read_text()
+    in_section = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            in_section = stripped == f"[{RCLONE_REMOTE}]"
+            continue
+        if in_section and stripped.startswith("token"):
+            _, _, raw = stripped.partition("=")
+            token = json.loads(raw.strip())
+            return token["access_token"]
+    sys.exit(f"Token não encontrado para remote '{RCLONE_REMOTE}' em {RCLONE_CONF}")
+
+
+def download(sheet_id, access_token, out_path):
+    url = f"https://www.googleapis.com/drive/v3/files/{sheet_id}/export?mimeType={XLSX_MIME}"
+    result = subprocess.run(
+        [
+            "curl", "-sSfL",
+            "-H", f"Authorization: Bearer {access_token}",
+            "-o", str(out_path),
+            "-w", "%{http_code}",
+            url,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
     )
+    if result.returncode != 0:
+        sys.exit(f"curl falhou ({result.returncode}): {result.stderr or result.stdout}")
+    code = result.stdout.strip().splitlines()[-1] if result.stdout else "?"
+    if code != "200":
+        sys.exit(f"HTTP {code} ao baixar planilha. Verifique se a planilha está compartilhada com sua conta.")
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--sheet-id", default=os.environ.get("SHEET_ID"),
-                        help="ID da planilha no Drive (ou via env SHEET_ID)")
-    parser.add_argument("--out", default="/tmp/planilha.xlsx",
-                        help="Path do XLSX de saída (padrão /tmp/planilha.xlsx)")
-    args = parser.parse_args()
-
-    if not args.sheet_id:
-        sys.exit("Faltou --sheet-id ou env SHEET_ID")
-
-    creds = load_credentials()
-    service = build("drive", "v3", credentials=creds, cache_discovery=False)
-    request = service.files().export_media(fileId=args.sheet_id, mimeType=XLSX_MIME)
-
-    buf = io.BytesIO()
-    downloader = MediaIoBaseDownload(buf, request)
-    done = False
-    while not done:
-        _, done = downloader.next_chunk()
-
-    out_path = Path(args.out)
-    out_path.write_bytes(buf.getvalue())
-    print(f"Baixado: {out_path} ({out_path.stat().st_size:,} bytes)")
+    refresh_rclone_token()
+    token = read_access_token()
+    download(SHEET_ID, token, OUT)
+    size = OUT.stat().st_size
+    print(f"Baixado: {OUT} ({size:,} bytes)")
 
 
 if __name__ == "__main__":

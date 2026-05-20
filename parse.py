@@ -17,7 +17,7 @@ from pathlib import Path
 import openpyxl
 
 XLSX = Path("/tmp/planilha.xlsx")
-OUT = Path("/Users/raphabride/Desktop/fluxo-caixa-dash/data.json")
+OUT = Path(__file__).parent / "data.json"
 
 
 def to_iso(v):
