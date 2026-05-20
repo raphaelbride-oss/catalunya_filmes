@@ -366,6 +366,14 @@ if (PAYLOAD && PAYLOAD.encrypted) {
 }
 
 function bootApp() {
+  // Exclui provisões/forecast de receita (não são entradas reais).
+  // Match em cliente OU job contendo "Previsões - JOBS" (case e acento insensível).
+  const isProvisao = (s) => {
+    const norm = (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    return norm.includes("previsoes - jobs") || norm.includes("previsoes-jobs");
+  };
+  DATA.ar = DATA.ar.filter(r => !isProvisao(r.cliente) && !isProvisao(r.job));
+
   allAP = [...DATA.ap_main, ...DATA.ap_reneg];
   document.getElementById("generated").textContent = new Date(DATA.generated_at).toLocaleString("pt-BR");
   document.getElementById("today").textContent = TODAY.toLocaleDateString("pt-BR");
