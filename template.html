@@ -89,6 +89,7 @@ main { padding: 24px 32px 64px; max-width: 1600px; margin: 0 auto; }
 .tree-table .indent-0 td:first-child { padding-left: 12px; }
 .tree-table .indent-1 td:first-child { padding-left: 36px; color: var(--muted); font-weight: 400; }
 .tree-table .indent-2 td:first-child { padding-left: 60px; color: var(--muted); font-weight: 400; font-size: 12px; }
+.tree-table th, .tree-table td { border-left: 0; border-right: 0; }
 
 /* Projects table */
 .proj-table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
@@ -1815,6 +1816,13 @@ function renderDrawerPivot(filtered, mode) {
     return;
   }
 
+  // Quantas partes únicas há em todo o filtered?
+  const uniqueParts = new Set();
+  for (const r of filtered) uniqueParts.add((r.parte || "(sem)").trim() || "(sem)");
+  const singlePart = uniqueParts.size === 1;
+  // Quando há só 1 parte (ex: drawer de UM fornecedor/cliente específico),
+  // o sub-nó é redundante — mostrar só as categorias como folhas.
+
   const tree = Object.entries(byCat)
     .sort((a, b) => b[1].total - a[1].total)
     .map(([cat, v]) => ({
@@ -1825,7 +1833,7 @@ function renderDrawerPivot(filtered, mode) {
         { html: BRL(v.total), color: valColor, bold: true },
         { html: (grandTotal > 0 ? (v.total / grandTotal * 100).toFixed(1) : "0") + "%", color: "var(--muted)" },
       ],
-      children: Object.entries(v.byParte)
+      children: singlePart ? undefined : Object.entries(v.byParte)
         .sort((a, b) => b[1].total - a[1].total)
         .map(([parte, pv]) => ({
           id: `dpp:${cat}:${parte}`,
@@ -1841,14 +1849,14 @@ function renderDrawerPivot(filtered, mode) {
   renderTreeTable({
     tree,
     columns: [
-      { label: "Categoria / Parte", num: false },
+      { label: singlePart ? "Categoria" : "Categoria / Parte", num: false },
       { label: "Lanç.", num: true },
       { label: "Total", num: true },
-      { label: "% / dentro categ.", num: true },
+      { label: singlePart ? "%" : "% / dentro categ.", num: true },
     ],
     container,
     expanded: drawerPivotExpanded,
-    title: `${Object.keys(byCat).length} categorias`,
+    title: `${Object.keys(byCat).length} categorias${singlePart ? "" : ` · ${uniqueParts.size} partes`}`,
   });
 }
 
