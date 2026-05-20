@@ -53,6 +53,41 @@ main { padding: 24px 32px 64px; max-width: 1600px; margin: 0 auto; }
 .kpi.amber .value { color: var(--amber); }
 .kpi.accent .value { color: var(--accent); }
 
+/* Main tabs */
+.main-tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+.main-tabs button { background: transparent; color: var(--muted); border: none; padding: 12px 20px; font-size: 14px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.15s, border-color 0.15s; }
+.main-tabs button:hover { color: var(--text); }
+.main-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* DRE table */
+.dre-table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.dre-table th, .dre-table td { padding: 8px 12px; text-align: right; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.dre-table th:first-child, .dre-table td:first-child { text-align: left; }
+.dre-table thead th { background: var(--surface-2); color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; position: sticky; top: 0; }
+.dre-table .section { background: var(--surface-2); font-weight: 600; }
+.dre-table .total { background: #f9fafb; font-weight: 600; border-top: 2px solid var(--border); }
+.dre-table .subitem td:first-child { padding-left: 28px; color: var(--muted); }
+.dre-table tr.clickable { cursor: pointer; }
+.dre-table tr.clickable:hover td { background: rgba(37,99,235,0.04); }
+.dre-wrap { overflow-x: auto; }
+.dre-pos { color: var(--green); }
+.dre-neg { color: var(--red); }
+
+/* Projects table */
+.proj-table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.proj-table th, .proj-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.proj-table th { background: var(--surface-2); color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; user-select: none; text-align: left; }
+.proj-table th.num { text-align: right; }
+.proj-table th.sorted::after { content: " ▾"; color: var(--accent); }
+.proj-table th.sorted.asc::after { content: " ▴"; }
+.proj-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.proj-table tr { cursor: pointer; }
+.proj-table tr:hover td { background: rgba(37,99,235,0.04); }
+.bar-bg { display: inline-block; width: 80px; height: 6px; background: var(--border); border-radius: 3px; vertical-align: middle; overflow: hidden; }
+.bar-fill { display: block; height: 100%; border-radius: 3px; }
+
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
 @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
@@ -167,6 +202,13 @@ main { padding: 24px 32px 64px; max-width: 1600px; margin: 0 auto; }
     <div class="summary-pill" id="filter-summary"></div>
   </div>
 
+  <div class="main-tabs" id="main-tabs">
+    <button data-tab="fluxo" class="active">Fluxo de Caixa</button>
+    <button data-tab="dre">DRE</button>
+    <button data-tab="projetos">Projetos</button>
+  </div>
+
+  <div class="tab-content active" data-tab="fluxo">
   <section class="kpis" id="kpis"></section>
 
   <section class="card wide">
@@ -212,9 +254,26 @@ main { padding: 24px 32px 64px; max-width: 1600px; margin: 0 auto; }
     </div>
     <div class="list" id="venc-list"></div>
   </section>
+  </div><!-- /tab fluxo -->
+
+  <div class="tab-content" data-tab="dre">
+    <section class="card wide">
+      <h2>DRE por competência</h2>
+      <div class="desc">Receitas (AR) e despesas (AP) agrupadas por mês de competência e classificação do P&amp;L. Clique numa linha para detalhar lançamentos.</div>
+      <div class="dre-wrap" id="dre-container"></div>
+    </section>
+  </div><!-- /tab dre -->
+
+  <div class="tab-content" data-tab="projetos">
+    <section class="card wide">
+      <h2>Projetos (JOBs)</h2>
+      <div class="desc">Receita, despesas e margem por projeto. Filtrado pelo período (competência) selecionado. Clique numa linha para ver lançamentos.</div>
+      <div id="proj-container"></div>
+    </section>
+  </div><!-- /tab projetos -->
 
   <div class="footer">
-    Fonte: Google Sheets · Clique nos cards e gráficos para detalhar
+    Fonte: Google Sheets · Clique nos cards, gráficos e linhas para detalhar
   </div>
 </main>
 
@@ -916,6 +975,316 @@ function renderAll() {
   renderFluxo();
   renderCat();
   renderVenc();
+  renderDRE();
+  renderProjetos();
+}
+
+// ============================================================
+// MAIN TABS — Fluxo / DRE / Projetos
+// ============================================================
+document.querySelectorAll("#main-tabs button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const tab = btn.dataset.tab;
+    document.querySelectorAll("#main-tabs button").forEach(b => b.classList.toggle("active", b === btn));
+    document.querySelectorAll(".tab-content").forEach(c => c.classList.toggle("active", c.dataset.tab === tab));
+  });
+});
+
+// ============================================================
+// DRE — pivot competência × subitem P&L
+// ============================================================
+function getCompMonth(r) {
+  // competência pode vir como ISO ("2026-02-01") ou string "MM/YYYY"
+  const c = r.competencia;
+  if (!c) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(c)) return c.slice(0, 7);
+  const m = c.match(/^(\d{1,2})\/(\d{4})$/);
+  if (m) return `${m[2]}-${m[1].padStart(2, "0")}`;
+  return null;
+}
+
+// Ordem das categorias no DRE (subitens reagrupados por seção)
+const DRE_SECTIONS = [
+  {
+    name: "RECEITA OPERACIONAL",
+    type: "in",
+    items: ["Receita"],
+  },
+  {
+    name: "(-) DEDUÇÕES E IMPOSTOS",
+    type: "out",
+    items: ["PIS/COFINS", "ISS", "Taxa Ancine", "Impostos sobre o Lucro"],
+  },
+  {
+    name: "(-) CUSTOS DE PRODUÇÃO",
+    type: "out",
+    items: [
+      "Equipe Técnica Freelance",
+      "Cachês de Direção e Roteiro",
+      "Cachês de Atores e Apresentadores",
+      "Salários CLT / PJ - Custo",
+      "Locação de Equipamentos de Terceiros",
+      "Locação de Espaços e Estúdios",
+      "Cenografia, Figurino e Arte",
+      "Logística de Set",
+      "Alimentação e Catering",
+      "Direitos Autorais, Licenciamentos e Trilha Sonora",
+      "Seguros de Produção e Equipamentos",
+    ],
+  },
+  {
+    name: "(-) DESPESAS OPERACIONAIS (G&A)",
+    type: "out",
+    items: [
+      "Salários CLT / PJ",
+      "Encargos",
+      "Benefícios",
+      "Provisões e Rescisão",
+      "Alugueis",
+      "Servicos de escritorio",
+      "Material de escritorio",
+      "Manutencao",
+      "SaaS - G&A",
+      "Logistics - G&A",
+      "Servicos de Terceiros - G&A",
+      "Consultorias - G&A",
+      "Contabilidade",
+      "Legal - Jurídico",
+      "Outras despesas e servicos - G&A",
+    ],
+  },
+  {
+    name: "(-) DESPESAS COMERCIAIS",
+    type: "out",
+    items: ["Comissões", "Despesas com Festivais, Premiações e PR"],
+  },
+  {
+    name: "(-) DESPESAS FINANCEIRAS",
+    type: "out",
+    items: ["Despesas Financeiras", "Tarifas Bancárias e Taxas Transacionais"],
+  },
+  {
+    name: "(-) OUTROS / FORA DO P&L",
+    type: "out",
+    items: ["Distribuição de Lucros (Fora do P&L)", "CAPEX (Ativo - Fora do P&L)", "Contingencias e Acordos", "Outros"],
+  },
+];
+
+function renderDRE() {
+  const container = document.getElementById("dre-container");
+  // Filtrar AP+AR pela competência dentro do range
+  const all = [...DATA.ar, ...allAP].filter(r => {
+    if (!r.valor) return false;
+    const cm = getCompMonth(r);
+    if (!cm) return false;
+    const firstDay = cm + "-01";
+    return inRange(firstDay);
+  });
+
+  // Buckets: { subitem: { mes: total } }
+  const buckets = {};
+  const monthsSet = new Set();
+  for (const r of all) {
+    const cm = getCompMonth(r);
+    monthsSet.add(cm);
+    const sub = r.pl_subitem || "Outros";
+    if (!buckets[sub]) buckets[sub] = {};
+    buckets[sub][cm] = (buckets[sub][cm] || 0) + (r.valor || 0);
+  }
+  const months = [...monthsSet].sort();
+  if (!months.length) {
+    container.innerHTML = `<div class="empty" style="padding: 40px;">Nenhum lançamento com competência no período selecionado.</div>`;
+    return;
+  }
+
+  // Render tabela
+  const cols = ["", ...months.map(fmtMonth), "Total"];
+  let html = `<table class="dre-table"><thead><tr>` +
+    cols.map((c, i) => `<th${i === 0 ? "" : " class='num'"}>${c}</th>`).join("") +
+    `</tr></thead><tbody>`;
+
+  let receitaTotal = months.map(() => 0);
+  let despesaTotal = months.map(() => 0);
+
+  for (const section of DRE_SECTIONS) {
+    // Calcula totais da seção
+    const sectionTotalByMonth = months.map(() => 0);
+    const itemsWithData = [];
+    for (const item of section.items) {
+      const bucket = buckets[item];
+      if (!bucket) continue;
+      const monthVals = months.map(m => bucket[m] || 0);
+      const total = monthVals.reduce((s, v) => s + v, 0);
+      if (total === 0) continue;
+      itemsWithData.push({ name: item, monthVals, total });
+      monthVals.forEach((v, i) => sectionTotalByMonth[i] += v);
+    }
+    if (!itemsWithData.length) continue;
+
+    // Header da seção
+    html += `<tr class="section"><td>${section.name}</td>` +
+      sectionTotalByMonth.map(v => `<td>${v === 0 ? "—" : BRL(v)}</td>`).join("") +
+      `<td>${BRL(sectionTotalByMonth.reduce((s, v) => s + v, 0))}</td></tr>`;
+
+    // Subitens
+    for (const item of itemsWithData) {
+      html += `<tr class="subitem clickable" data-section="${section.type}" data-item="${item.name.replace(/"/g, "&quot;")}">` +
+        `<td>${item.name}</td>` +
+        item.monthVals.map(v => `<td>${v === 0 ? "—" : BRL(v)}</td>`).join("") +
+        `<td>${BRL(item.total)}</td></tr>`;
+    }
+
+    // Acumular nos totais gerais
+    if (section.type === "in") {
+      sectionTotalByMonth.forEach((v, i) => receitaTotal[i] += v);
+    } else {
+      sectionTotalByMonth.forEach((v, i) => despesaTotal[i] += v);
+    }
+  }
+
+  // Linha de RESULTADO LÍQUIDO
+  const resultado = months.map((_, i) => receitaTotal[i] - despesaTotal[i]);
+  html += `<tr class="total"><td>RESULTADO LÍQUIDO</td>` +
+    resultado.map(v => `<td class="${v >= 0 ? 'dre-pos' : 'dre-neg'}">${BRL(v)}</td>`).join("") +
+    `<td class="${resultado.reduce((s, v) => s + v, 0) >= 0 ? 'dre-pos' : 'dre-neg'}">${BRL(resultado.reduce((s, v) => s + v, 0))}</td></tr>`;
+
+  html += `</tbody></table>`;
+  container.innerHTML = html;
+
+  // Click handler nas linhas de subitem
+  container.querySelectorAll("tr.clickable").forEach(tr => {
+    tr.addEventListener("click", () => {
+      const item = tr.dataset.item;
+      const isReceita = tr.dataset.section === "in";
+      let rows = [];
+      if (isReceita) {
+        rows = DATA.ar.filter(r => {
+          const cm = getCompMonth(r);
+          return cm && (buckets[item] && buckets[item][cm] !== undefined) && inRange(cm + "-01");
+        }).map(arRow);
+      } else {
+        rows = allAP.filter(r => (r.pl_subitem || "Outros") === item && inRange((getCompMonth(r) || "") + "-01")).map(apRow);
+      }
+      const total = rows.reduce((s, r) => s + (r.valor || 0), 0);
+      openDrawer({
+        title: `${item}`,
+        sub: `${rows.length} lançamentos · ${BRLfull(total)}`,
+        rows,
+        mode: isReceita ? "ar" : "ap",
+      });
+    });
+  });
+}
+
+// ============================================================
+// PROJETOS — agrupado por JOB
+// ============================================================
+let projSortKey = "margem";
+let projSortAsc = false;
+
+function renderProjetos() {
+  const container = document.getElementById("proj-container");
+  // Agrupar AP+AR por JOB. Filtrar pela competência do lançamento dentro do range.
+  const groups = {}; // { job: { receita, despesa, ar_count, ap_count } }
+  const filterByComp = (r) => {
+    const cm = getCompMonth(r);
+    if (!cm) return false;
+    return inRange(cm + "-01");
+  };
+
+  for (const r of DATA.ar) {
+    if (!r.valor || !filterByComp(r)) continue;
+    const job = (r.job || "(sem projeto)").trim() || "(sem projeto)";
+    if (!groups[job]) groups[job] = { receita: 0, despesa: 0, ar: 0, ap: 0 };
+    groups[job].receita += r.valor;
+    groups[job].ar += 1;
+  }
+  for (const r of allAP) {
+    if (!r.valor || !filterByComp(r)) continue;
+    const job = (r.job || "(sem projeto)").trim() || "(sem projeto)";
+    if (!groups[job]) groups[job] = { receita: 0, despesa: 0, ar: 0, ap: 0 };
+    groups[job].despesa += r.valor;
+    groups[job].ap += 1;
+  }
+
+  const rows = Object.entries(groups).map(([job, g]) => ({
+    job,
+    receita: g.receita,
+    despesa: g.despesa,
+    margem: g.receita - g.despesa,
+    margemPct: g.receita > 0 ? ((g.receita - g.despesa) / g.receita) * 100 : (g.despesa > 0 ? -100 : 0),
+    arCount: g.ar,
+    apCount: g.ap,
+  }));
+
+  if (!rows.length) {
+    container.innerHTML = `<div class="empty" style="padding: 40px;">Nenhum projeto no período.</div>`;
+    return;
+  }
+
+  rows.sort((a, b) => {
+    const va = a[projSortKey] ?? "", vb = b[projSortKey] ?? "";
+    if (typeof va === "number" && typeof vb === "number") return projSortAsc ? va - vb : vb - va;
+    return projSortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+  });
+
+  const maxAbs = Math.max(...rows.map(r => Math.abs(r.receita)), ...rows.map(r => Math.abs(r.despesa)), 1);
+
+  const cols = [
+    { k: "job", l: "Projeto", num: false },
+    { k: "receita", l: "Receita", num: true },
+    { k: "despesa", l: "Despesa", num: true },
+    { k: "margem", l: "Margem", num: true },
+    { k: "margemPct", l: "% Margem", num: true },
+    { k: "_count", l: "Lançamentos", num: true },
+  ];
+
+  let html = `<table class="proj-table"><thead><tr>` +
+    cols.map(c => `<th class="${c.num ? 'num' : ''} ${projSortKey === c.k ? 'sorted ' + (projSortAsc ? 'asc' : '') : ''}" data-sort="${c.k}">${c.l}</th>`).join("") +
+    `</tr></thead><tbody>`;
+
+  for (const r of rows) {
+    const margemColor = r.margem >= 0 ? "var(--green)" : "var(--red)";
+    const recBar = Math.round((r.receita / maxAbs) * 80);
+    const despBar = Math.round((r.despesa / maxAbs) * 80);
+    html += `<tr data-job="${r.job.replace(/"/g, "&quot;")}">` +
+      `<td>${r.job.replace(/</g, "&lt;")}</td>` +
+      `<td class="num"><span class="bar-bg"><span class="bar-fill" style="width:${recBar}px;background:var(--green)"></span></span> ${BRL(r.receita)}</td>` +
+      `<td class="num"><span class="bar-bg"><span class="bar-fill" style="width:${despBar}px;background:var(--red)"></span></span> ${BRL(r.despesa)}</td>` +
+      `<td class="num" style="color:${margemColor};font-weight:600">${BRL(r.margem)}</td>` +
+      `<td class="num" style="color:${margemColor}">${r.margemPct.toFixed(1)}%</td>` +
+      `<td class="num" style="color:var(--muted)">${r.arCount + r.apCount} (${r.arCount}↓ ${r.apCount}↑)</td>` +
+      `</tr>`;
+  }
+  html += `</tbody></table>`;
+  container.innerHTML = html;
+
+  // Sort handlers
+  container.querySelectorAll("th[data-sort]").forEach(th => {
+    th.addEventListener("click", () => {
+      const k = th.dataset.sort;
+      if (projSortKey === k) projSortAsc = !projSortAsc;
+      else { projSortKey = k; projSortAsc = false; }
+      renderProjetos();
+    });
+  });
+
+  // Row click → drawer com lançamentos do projeto
+  container.querySelectorAll("tr[data-job]").forEach(tr => {
+    tr.addEventListener("click", () => {
+      const job = tr.dataset.job;
+      const arRows = DATA.ar.filter(r => (r.job || "(sem projeto)").trim() === job && filterByComp(r)).map(arRow);
+      const apRows = allAP.filter(r => (r.job || "(sem projeto)").trim() === job && filterByComp(r)).map(apRow);
+      const all = [...arRows, ...apRows];
+      const total = all.reduce((s, r) => s + (r.valor || 0) * (r.tipo === "AP" ? -1 : 1), 0);
+      openDrawer({
+        title: job,
+        sub: `${all.length} lançamentos · margem ${BRLfull(total)}`,
+        rows: all,
+        mode: "mix",
+      });
+    });
+  });
 }
 
 // ====================== DRILL-DOWN DRAWER ===============================

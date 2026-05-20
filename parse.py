@@ -106,6 +106,26 @@ wb = openpyxl.load_workbook(str(XLSX), read_only=True, data_only=True)
 
 
 # --------------------------------------------------------------------------
+# De-Para: PLANO DE CONTAS -> Subitem do P&L (aba "From  To", cols E/F)
+# --------------------------------------------------------------------------
+pl_mapping = {}
+ws = wb["From  To"]
+for r in ws.iter_rows(values_only=True):
+    if len(r) > 5 and r[4] and r[5]:
+        key = str(r[4]).strip()
+        val = str(r[5]).strip()
+        if key and val and key != "Conta Original no ERP (De)":
+            pl_mapping[key] = val
+
+
+def classify_pl(plano):
+    """Retorna o subitem P&L baseado no Plano de Contas. Fallback: 'Outros'."""
+    if not plano:
+        return "Outros"
+    return pl_mapping.get(plano.strip(), "Outros")
+
+
+# --------------------------------------------------------------------------
 # CONTAS A PAGAR (AP principal)
 # --------------------------------------------------------------------------
 ap_main = []
@@ -117,6 +137,14 @@ if hdr_idx is None:
 header = rows[hdr_idx]
 idx = build_index(header)
 
+# PLANO DE CONTAS em CONTAS A PAGAR está numa coluna sem header,
+# logo após FORMA DE PAGAMENTO. Descobrir o índice dela:
+plano_idx = None
+for k, i in idx.items():
+    if k.replace(" ", "").upper() == "FORMADEPAGAMENTO":
+        plano_idx = i + 1
+        break
+
 for r in rows[hdr_idx + 1:]:
     # ignora linhas inteiramente vazias
     if all(c is None or (isinstance(c, str) and not c.strip()) for c in r):
@@ -125,6 +153,7 @@ for r in rows[hdr_idx + 1:]:
     valor = to_float(col(idx, "VALOR FACE", r)) or to_float(col(idx, "VALOR A PAGAR", r))
     if not fornecedor and valor is None:
         continue
+    plano_contas = s(r[plano_idx]) if plano_idx is not None and plano_idx < len(r) else ""
     ap_main.append({
         "competencia": to_iso(col(idx, "COMPETENCIA", r)) or s(col(idx, "COMPETENCIA", r)),
         "empresa": s(col(idx, "EMPRESA", r)),
@@ -139,7 +168,8 @@ for r in rows[hdr_idx + 1:]:
         "job": s(col(idx, "JOB", r)),
         "descricao": s(col(idx, "DESCRIÇÃO", r)),
         "forma_pagamento": s(col(idx, "FORMA DE PAGAMENTO", r)),
-        "plano_contas": "",  # AP main não tem essa coluna
+        "plano_contas": plano_contas,
+        "pl_subitem": classify_pl(plano_contas),
         "status": s(col(idx, "STATUS", r)),
         "dias_atraso": to_float(col(idx, "DIAS EM ATRASO", r)),
     })
@@ -181,6 +211,7 @@ for r in rows[hdr_idx + 1:]:
         "descricao": s(col(idx_reneg, "DESCRIÇÃO", r)),
         "forma_pagamento": s(col(idx_reneg, "FORMA DE PAGAMENTO", r)),
         "plano_contas": s(col(idx_reneg, "PLANO DE CONTAS", r)),
+        "pl_subitem": classify_pl(s(col(idx_reneg, "PLANO DE CONTAS", r))),
         "status": "",  # derivado abaixo
         "dias_atraso": to_float(col(idx_reneg, "DIAS EM ATRASO", r)),
     })
@@ -219,6 +250,7 @@ for r in rows[hdr_idx + 1:]:
         "descricao": s(col(idx_ar, "DESCRIÇÃO", r)),
         "forma_pagamento": s(col(idx_ar, "FORMA DE PAGAMENTO", r)),
         "plano_contas": s(col(idx_ar, "PLANO DE CONTAS", r)),
+        "pl_subitem": "Receita",  # AR é tudo Receita (sem classificação por enquanto)
         "status": s(col(idx_ar, "STATUS", r)),
         "dias_atraso": to_float(col(idx_ar, "DIAS EM ATRASO", r)),
     })
@@ -313,6 +345,7 @@ out = {
     "ap_main": ap_main,
     "ap_reneg": ap_reneg,
     "ar": ar,
+    "pl_mapping": pl_mapping,  # plano_contas -> subitem P&L (apenas referência)
     "parcelas_reneg": [],  # mantido para compat — não usado mais
 }
 
