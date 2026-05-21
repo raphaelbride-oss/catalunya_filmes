@@ -10,3 +10,7 @@ __pycache__/
 
 # Skill local (Claude Code) — não compartilhar
 .claude/
+
+# Pipeline local
+refresh.log
+refresh.sh
