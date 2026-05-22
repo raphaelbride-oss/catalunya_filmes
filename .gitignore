@@ -1,16 +1,7 @@
-# Dados sensíveis — NUNCA versionar
-data.json
-service-account.json
-*.xlsx
-
-# Cache / build
-__pycache__/
-*.pyc
+# Este repo serve APENAS index.html (dashboard criptografado).
+# Bloqueia tudo o que não for esses dois arquivos.
+*
+!.gitignore
+!README.md
+!index.html
 .DS_Store
-
-# Skill local (Claude Code) — não compartilhar
-.claude/
-
-# Pipeline local
-refresh.log
-refresh.sh
